@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-karpenter
+  annotations:
+    openshift.io/node-selector: ""
+    workload.openshift.io/allowed: management
+    exclude.release.openshift.io/internal-openshift-hosted: "true"
+    include.release.openshift.io/self-managed-high-availability: "true"
+  labels:
+    openshift.io/cluster-monitoring: "true"
