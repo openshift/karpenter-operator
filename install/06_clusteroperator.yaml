@@ -1,0 +1,31 @@
+apiVersion: config.openshift.io/v1
+kind: ClusterOperator
+metadata:
+  name: karpenter
+  annotations:
+    exclude.release.openshift.io/internal-openshift-hosted: "true"
+    include.release.openshift.io/self-managed-high-availability: "true"
+spec: {}
+status:
+  versions:
+  - name: operator
+    version: "0.0.1-snapshot"
+  relatedObjects:
+  - group: ""
+    name: openshift-karpenter
+    resource: namespaces
+  - group: karpenter.k8s.aws
+    name: ""
+    resource: ec2nodeclasses
+  - group: karpenter.sh
+    name: ""
+    resource: nodepools
+  - group: karpenter.sh
+    name: ""
+    resource: nodeclaims
+  - group: rbac.authorization.k8s.io
+    name: karpenter-operator
+    resource: clusterroles
+  - group: rbac.authorization.k8s.io
+    name: karpenter-operator
+    resource: clusterrolebindings
