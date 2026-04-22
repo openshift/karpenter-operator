@@ -1,0 +1,85 @@
+commit f20be0920f9b639608688c12a9e46b63c9498fb7
+Author: Max Cao <macao@redhat.com>
+Date:   Wed Apr 22 12:51:36 2026 -0700
+
+    ci: add GitHub Actions verify workflow and golangci-lint config
+    
+    Made-with: Cursor
+
+diff --git a/.golangci.yml b/.golangci.yml
+new file mode 100644
+index 0000000..03a7f0b
+--- /dev/null
++++ b/.golangci.yml
+@@ -0,0 +1,71 @@
++version: "2"
++run:
++  modules-download-mode: vendor
++  tests: true
++  timeout: 5m
++linters:
++  enable:
++    - asciicheck
++    - bidichk
++    - copyloopvar
++    - errorlint
++    - gocyclo
++    - gosec
++    - misspell
++    - nilerr
++    - revive
++    - staticcheck
++    - tparallel
++    - unconvert
++    - unparam
++  disable:
++    - prealloc
++  settings:
++    gocyclo:
++      min-complexity: 11
++    govet:
++      disable:
++        - fieldalignment
++      enable-all: true
++    misspell:
++      locale: US
++    revive:
++      rules:
++        - name: dot-imports
++          disabled: true
++    staticcheck:
++      dot-import-whitelist:
++        - github.com/onsi/ginkgo/v2
++        - github.com/onsi/gomega
++  exclusions:
++    generated: lax
++    presets:
++      - comments
++      - common-false-positives
++      - legacy
++      - std-error-handling
++    rules:
++      - path: (.+)\.go$
++        text: declaration of "(err|ctx)" shadows declaration at
++      - linters:
++          - unparam
++        path: '_test\.go$'
++issues:
++  fix: true
++formatters:
++  enable:
++    - gci
++  settings:
++    gci:
++      sections:
++        - standard
++        - dot
++        - prefix(github.com/openshift/karpenter-operator)
++        - prefix(github.com/openshift)
++        - prefix(github.com/aws)
++        - prefix(k8s.io)
++        - prefix(sigs.k8s.io)
++        - default
++      custom-order: true
++  exclusions:
++    generated: lax
