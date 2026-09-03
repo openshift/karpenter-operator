@@ -1,12 +1,16 @@
 package common
 
 import (
+	"context"
+
 	configv1 "github.com/openshift/api/config/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
 
 // InfrastructureInfo contains cluster infrastructure metadata from the Infrastructure CR.
@@ -25,6 +29,12 @@ type CloudProvider interface {
 	CRDs() []*apiextensionsv1.CustomResourceDefinition
 	RBAC() RBACAssets
 	RelatedObjects() []configv1.ObjectReference
+	NodeIdentityVerifier() NodeIdentityVerifier
+}
+
+// NodeIdentityVerifier verifies that a node identity belongs to one or more NodeClaims.
+type NodeIdentityVerifier interface {
+	Verify(ctx context.Context, nodeName string, nodeClaims []karpenterv1.NodeClaim) (bool, error)
 }
 
 // RBACAssets groups all operand RBAC resources (namespace-scoped and cluster-scoped).

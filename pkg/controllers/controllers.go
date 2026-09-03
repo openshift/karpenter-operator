@@ -8,6 +8,7 @@ import (
 	"github.com/openshift/karpenter-operator/pkg/controllers/clusteroperator"
 	"github.com/openshift/karpenter-operator/pkg/controllers/crd"
 	"github.com/openshift/karpenter-operator/pkg/controllers/karpenter"
+	"github.com/openshift/karpenter-operator/pkg/controllers/machineapprover"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
@@ -59,6 +60,10 @@ func NewControllers(mgr ctrl.Manager, cfg *Config) []Controller {
 				TokenMinterImage: cfg.TokenMinterImage,
 			}),
 		)
+
+		if controller := newMachineApproverController(cfg); controller != nil {
+			controllers = append(controllers, controller)
+		}
 	} else {
 		controllers = append(controllers,
 			karpenter.NewOCPController(mgr.GetClient(), &karpenter.OCPControllerConfig{
@@ -77,6 +82,19 @@ func NewControllers(mgr ctrl.Manager, cfg *Config) []Controller {
 	}
 
 	return controllers
+}
+
+func newMachineApproverController(cfg *Config) Controller {
+	if cfg.HostedCluster == nil {
+		return nil
+	}
+
+	verifier := cfg.CloudProvider.NodeIdentityVerifier()
+	if verifier == nil {
+		return nil
+	}
+
+	return machineapprover.NewMachineApproverController(cfg.HostedCluster, verifier)
 }
 
 func Setup(mgr ctrl.Manager, controllers ...Controller) error {

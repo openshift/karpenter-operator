@@ -50,3 +50,8 @@ func New(ctx context.Context, infra common.InfrastructureInfo) (*Provider, error
 		ec2Client:       ec2.NewFromConfig(cfg, func(o *ec2.Options) { o.Region = infra.Region }),
 	}, nil
 }
+
+// NodeIdentityVerifier returns the provider's node identity verifier.
+func (p *Provider) NodeIdentityVerifier() common.NodeIdentityVerifier {
+	return &nodeIdentityVerifier{ec2Client: p.ec2Client}
+}

@@ -28,3 +28,8 @@ func New(_ context.Context, infra common.InfrastructureInfo) (*Provider, error) 
 		karpenterImage: karpenterImage,
 	}, nil
 }
+
+// NodeIdentityVerifier returns nil until Azure node identity verification is supported.
+func (p *Provider) NodeIdentityVerifier() common.NodeIdentityVerifier {
+	return nil
+}

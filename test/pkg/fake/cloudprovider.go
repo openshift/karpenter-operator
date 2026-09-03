@@ -27,3 +27,4 @@ func (f *CloudProvider) OperandConfig() common.OperandCloudConfig          { ret
 func (f *CloudProvider) CRDs() []*apiextensionsv1.CustomResourceDefinition { return f.CloudCRDs }
 func (f *CloudProvider) RBAC() common.RBACAssets                           { return f.CloudRBAC }
 func (f *CloudProvider) RelatedObjects() []configv1.ObjectReference        { return f.Objects }
+func (f *CloudProvider) NodeIdentityVerifier() common.NodeIdentityVerifier { return nil }

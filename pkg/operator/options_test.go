@@ -3,7 +3,20 @@ package operator
 import (
 	"strings"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+func TestSchemeIncludesKarpenterTypes(t *testing.T) {
+	for _, kind := range []string{"NodeClaim", "NodeClaimList"} {
+		t.Run(kind, func(t *testing.T) {
+			gvk := schema.GroupVersionKind{Group: "karpenter.sh", Version: "v1", Kind: kind}
+			if !scheme.Recognizes(gvk) {
+				t.Errorf("scheme does not recognize %s", gvk)
+			}
+		})
+	}
+}
 
 func TestLoadEnv(t *testing.T) {
 	t.Setenv(ReleaseVersionEnvName, "4.23.0")
