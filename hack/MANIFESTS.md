@@ -13,9 +13,9 @@ and the operator's RBAC requirements.
           │ ─ hack/manifest-diff-upstream.sh ─ │
           │                                    │
           ▼                                    ▼
-  pkg/assets/karpenter/*.yaml     pkg/assets/crds/*.yaml
-  pkg/assets/aws/*.yaml           (operator applies at runtime)
-  (operand RBAC)
+  pkg/assets/karpenter/*.yaml     pkg/assets/crds/*.yaml (core CRDs)
+  pkg/assets/aws/*.yaml           pkg/assets/azure/*.yaml (Azure CRD)
+  (operand RBAC + AWS CRD)       (operator applies at runtime)
           │
           │         pkg/assets/operator/rbac.yaml
           │         (hand-maintained)
@@ -40,8 +40,9 @@ and the operator's RBAC requirements.
 | -------- | ----- | ---------- | -------- |
 | `pkg/assets/operator/rbac.yaml` | Hand-maintained | — (source only) | Operator's own SA, Roles, Bindings |
 | `pkg/assets/karpenter/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | Core operand RBAC |
-| `pkg/assets/aws/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | AWS-specific operand RBAC |
-| `pkg/assets/crds/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | Upstream CRDs |
+| `pkg/assets/aws/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | AWS-specific operand RBAC and EC2NodeClass CRD |
+| `pkg/assets/azure/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | AKSNodeClass CRD |
+| `pkg/assets/crds/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | Core Karpenter CRDs (NodePool, NodeClaim, NodeOverlay) |
 | `install/04_rbac.yaml` | `manifest-diff.sh` | CVO | Operator RBAC + escalation superset |
 
 ## Key concepts
@@ -71,7 +72,9 @@ on all documents via a `$CVO_ANNOTATIONS_YQ` yq expression.
 Fetches the OpenShift Karpenter fork, renders the Helm chart, and extracts:
 
 - RBAC resources → `pkg/assets/karpenter/` and `pkg/assets/aws/`
-- CRDs → `pkg/assets/crds/`
+- Core CRDs → `pkg/assets/crds/`
+- AWS CRDs → `pkg/assets/aws/`
+- Azure CRDs → `pkg/assets/azure/`
 
 Fails if upstream has RBAC resources not handled by an `extract` call.
 

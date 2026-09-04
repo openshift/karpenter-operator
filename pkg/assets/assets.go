@@ -19,6 +19,9 @@ var coreContent embed.FS
 //go:embed aws/*.yaml
 var awsContent embed.FS
 
+//go:embed azure/*.yaml
+var azureContent embed.FS
+
 //go:embed crds/*.yaml
 var crdContent embed.FS
 
@@ -86,16 +89,16 @@ func init() {
 	CoreCRDs = []*apiextensionsv1.CustomResourceDefinition{
 		mustDecode(crdContent, "crds/karpenter.sh_nodepools.yaml").(*apiextensionsv1.CustomResourceDefinition),
 		mustDecode(crdContent, "crds/karpenter.sh_nodeclaims.yaml").(*apiextensionsv1.CustomResourceDefinition),
-		// TODO(maxcao13): We don't formally support NodeOverlay yet, so don't deploy it
-		// https://redhat.atlassian.net/browse/RFE-9604
-		// mustDecode(crdContent, "crds/karpenter.sh_nodeoverlays.yaml").(*apiextensionsv1.CustomResourceDefinition),
 	}
 
 	AWSCRDs = []*apiextensionsv1.CustomResourceDefinition{
-		mustDecode(crdContent, "crds/karpenter.k8s.aws_ec2nodeclasses.yaml").(*apiextensionsv1.CustomResourceDefinition),
+		mustDecode(awsContent, "aws/karpenter.k8s.aws_ec2nodeclasses.yaml").(*apiextensionsv1.CustomResourceDefinition),
 	}
 
 	AzureCRDs = []*apiextensionsv1.CustomResourceDefinition{
-		mustDecode(crdContent, "crds/karpenter.azure.com_aksnodeclasses.yaml").(*apiextensionsv1.CustomResourceDefinition),
+		mustDecode(azureContent, "azure/karpenter.azure.com_aksnodeclasses.yaml").(*apiextensionsv1.CustomResourceDefinition),
+		// TODO(maxcao13): Azure Karpenter Provider requires this CRD to exist, but we don't formally support NodeOverlay yet.
+		// https://redhat.atlassian.net/browse/RFE-9604
+		mustDecode(crdContent, "crds/karpenter.sh_nodeoverlays.yaml").(*apiextensionsv1.CustomResourceDefinition),
 	}
 }
