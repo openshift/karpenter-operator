@@ -13,6 +13,12 @@ spec:
         - key: karpenter.sh/capacity-type
           operator: In
           values: ["on-demand"]
+        - key: karpenter.k8s.aws/instance-cpu
+          operator: Gte
+          values: ["4"]
+        - key: karpenter.k8s.aws/instance-memory
+          operator: Gte
+          values: ["8192"]
       nodeClassRef:
         group: karpenter.k8s.aws
         kind: EC2NodeClass
