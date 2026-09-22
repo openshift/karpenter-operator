@@ -81,6 +81,14 @@ func (c *HCPController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
+	// Wait for HCP Status.VersionStatus to be set by HyperShift before proceeding.
+	// This ensures the karpenter deployment will have the correct version annotation
+	// for MonitorOperandsRolloutStatus tracking.
+	if hcp.Status.VersionStatus == nil || hcp.Status.VersionStatus.Desired.Version == "" {
+		log.FromContext(ctx).Info("waiting for HCP status version to be set, requeuing")
+		return ctrl.Result{}, fmt.Errorf("HCP status version not yet available")
+	}
+
 	ref := hcpOwnerRef(hcp)
 
 	if err := applyServiceAccount(ctx, c.client, c.config.Namespace, ref); err != nil {
@@ -95,6 +103,7 @@ func (c *HCPController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		cloudProvider:   c.config.CloudProvider,
 		imagePullPolicy: corev1.PullIfNotPresent,
 		logLevelArg:     "--log-level=debug", // TODO(maxcao13): make this configurable
+		releaseVersion:  hcp.Status.VersionStatus.Desired.Version,
 		additionalEnv: []corev1.EnvVar{
 			{Name: common.KubeconfigEnvName, Value: targetKubeconfigMountPath + "/" + targetKubeconfigFilePath},
 			{Name: common.DisableLeaderElectionEnvName, Value: "true"},

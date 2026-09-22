@@ -41,6 +41,7 @@ type operandConfig struct {
 	cloudProvider            common.CloudProvider
 	imagePullPolicy          corev1.PullPolicy
 	logLevelArg              string
+	releaseVersion           string
 	additionalLabels         map[string]string
 	additionalEnv            []corev1.EnvVar
 	additionalVolumeMounts   []corev1.VolumeMount
