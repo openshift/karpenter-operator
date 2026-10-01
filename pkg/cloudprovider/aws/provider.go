@@ -54,3 +54,8 @@ func New(ctx context.Context, infra common.InfrastructureInfo) (*Provider, error
 func (p *Provider) NodeIdentityVerifier() common.NodeIdentityVerifier {
 	return &nodeIdentityVerifier{ec2Client: p.ec2Client}
 }
+
+// IgnitionNodeClassReconciler returns nil; AWS handles ignition data differently.
+func (p *Provider) IgnitionNodeClassReconciler() common.IgnitionNodeClassReconciler {
+	return nil
+}

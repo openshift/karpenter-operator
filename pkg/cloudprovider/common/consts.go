@@ -33,3 +33,18 @@ const (
 	// For Azure, this is the Azure location.
 	RegionEnvName = "REGION"
 )
+
+// Labels set on management-cluster secrets by the hypershift karpenter-adapter sidecar.
+// These constants mirror the ones in github.com/openshift/hypershift/api/karpenter/v1
+// and github.com/openshift/hypershift/support/karpenter.
+const (
+	// ManagedByKarpenterLabel identifies secrets managed by the karpenter ignition controller.
+	ManagedByKarpenterLabel = "hypershift.openshift.io/managed-by-karpenter"
+
+	// Azure Marketplace image labels on the userData secret. The nodeclass reconciler
+	// reads these to set AKSNodeClass.Spec.MarketplaceImage.
+	UserDataAzureMarketplacePublisherLabel = "hypershift.openshift.io/azure-marketplace-publisher"
+	UserDataAzureMarketplaceOfferLabel     = "hypershift.openshift.io/azure-marketplace-offer"
+	UserDataAzureMarketplaceSKULabel       = "hypershift.openshift.io/azure-marketplace-sku"
+	UserDataAzureMarketplaceVersionLabel   = "hypershift.openshift.io/azure-marketplace-version"
+)

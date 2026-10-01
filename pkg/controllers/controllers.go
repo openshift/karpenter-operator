@@ -9,6 +9,7 @@ import (
 	"github.com/openshift/karpenter-operator/pkg/controllers/crd"
 	"github.com/openshift/karpenter-operator/pkg/controllers/karpenter"
 	"github.com/openshift/karpenter-operator/pkg/controllers/machineapprover"
+	nodeclassreconciler "github.com/openshift/karpenter-operator/pkg/controllers/nodeclass/reconciler"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
@@ -64,6 +65,10 @@ func NewControllers(mgr ctrl.Manager, cfg *Config) []Controller {
 		if controller := newMachineApproverController(cfg); controller != nil {
 			controllers = append(controllers, controller)
 		}
+
+		if controller := newNodeClassReconcilerController(mgr, cfg); controller != nil {
+			controllers = append(controllers, controller)
+		}
 	} else {
 		controllers = append(controllers,
 			karpenter.NewOCPController(mgr.GetClient(), &karpenter.OCPControllerConfig{
@@ -95,6 +100,23 @@ func newMachineApproverController(cfg *Config) Controller {
 	}
 
 	return machineapprover.NewMachineApproverController(cfg.HostedCluster, verifier)
+}
+
+func newNodeClassReconcilerController(mgr ctrl.Manager, cfg *Config) Controller {
+	if cfg.HostedCluster == nil {
+		return nil
+	}
+
+	reconciler := cfg.CloudProvider.IgnitionNodeClassReconciler()
+	if reconciler == nil {
+		return nil
+	}
+
+	return nodeclassreconciler.NewController(mgr, &nodeclassreconciler.ControllerConfig{
+		Namespace:     cfg.Namespace,
+		Reconciler:    reconciler,
+		HostedCluster: cfg.HostedCluster,
+	})
 }
 
 func Setup(mgr ctrl.Manager, controllers ...Controller) error {

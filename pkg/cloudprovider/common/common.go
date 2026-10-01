@@ -10,6 +10,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
 
@@ -30,6 +31,22 @@ type CloudProvider interface {
 	RBAC() RBACAssets
 	RelatedObjects() []configv1.ObjectReference
 	NodeIdentityVerifier() NodeIdentityVerifier
+
+	// IgnitionNodeClassReconciler returns a reconciler that syncs ignition data
+	// from management-cluster secrets onto guest-cluster nodeclasses.
+	// Returns nil when the platform does not require this (e.g. standalone OCP).
+	IgnitionNodeClassReconciler() IgnitionNodeClassReconciler
+}
+
+// IgnitionNodeClassReconciler syncs ignition data from management-cluster userData
+// secrets onto guest-cluster nodeclass objects.
+type IgnitionNodeClassReconciler interface {
+	// ReconcileNodeClass reads the userData secret and updates the target nodeclass.
+	ReconcileNodeClass(ctx context.Context, secret *corev1.Secret, nodeClass client.Object) error
+	// WatchObject returns an empty typed object for the guest-cluster nodeclass watch.
+	WatchObject() client.Object
+	// ListNodeClasses returns all nodeclass objects in the guest cluster.
+	ListNodeClasses(ctx context.Context, c client.Client) ([]client.Object, error)
 }
 
 // NodeIdentityVerifier verifies that a node identity belongs to one or more NodeClaims.

@@ -73,11 +73,11 @@ func TestNewControllers(t *testing.T) {
 			wantControllers:   []string{"crd", "karpenter", "karpenter-machine-approver"},
 		},
 		{
-			name:              "When running in HCP Azure mode it should only enable core controllers",
+			name:              "When running in HCP Azure mode it should enable core controllers and nodeclass reconciler",
 			cloudProvider:     &azure.Provider{},
 			hostedCluster:     &testfake.Cluster{Cl: fakeclient.NewClientBuilder().Build(), Ca: &testfake.Cache{}},
 			managementCluster: true,
-			wantControllers:   []string{"crd", "karpenter"},
+			wantControllers:   []string{"crd", "karpenter", "nodeclass-reconciler"},
 		},
 	}
 

@@ -69,3 +69,9 @@ func New(_ context.Context, infra common.InfrastructureInfo) (*Provider, error) 
 func (p *Provider) NodeIdentityVerifier() common.NodeIdentityVerifier {
 	return nil
 }
+
+// IgnitionNodeClassReconciler returns the Azure reconciler that syncs userData
+// and marketplace image from management-cluster secrets onto AKSNodeClass.
+func (p *Provider) IgnitionNodeClassReconciler() common.IgnitionNodeClassReconciler {
+	return &ignitionNodeClassReconciler{}
+}

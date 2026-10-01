@@ -21,10 +21,11 @@ type CloudProvider struct {
 
 var _ common.CloudProvider = &CloudProvider{}
 
-func (f *CloudProvider) AddToScheme(_ *runtime.Scheme) error               { return nil }
-func (f *CloudProvider) KarpenterImage() string                            { return f.Image }
-func (f *CloudProvider) OperandConfig() common.OperandCloudConfig          { return f.CloudConfig }
-func (f *CloudProvider) CRDs() []*apiextensionsv1.CustomResourceDefinition { return f.CloudCRDs }
-func (f *CloudProvider) RBAC() common.RBACAssets                           { return f.CloudRBAC }
-func (f *CloudProvider) RelatedObjects() []configv1.ObjectReference        { return f.Objects }
-func (f *CloudProvider) NodeIdentityVerifier() common.NodeIdentityVerifier { return nil }
+func (f *CloudProvider) AddToScheme(_ *runtime.Scheme) error                             { return nil }
+func (f *CloudProvider) KarpenterImage() string                                          { return f.Image }
+func (f *CloudProvider) OperandConfig() common.OperandCloudConfig                        { return f.CloudConfig }
+func (f *CloudProvider) CRDs() []*apiextensionsv1.CustomResourceDefinition               { return f.CloudCRDs }
+func (f *CloudProvider) RBAC() common.RBACAssets                                         { return f.CloudRBAC }
+func (f *CloudProvider) RelatedObjects() []configv1.ObjectReference                      { return f.Objects }
+func (f *CloudProvider) NodeIdentityVerifier() common.NodeIdentityVerifier               { return nil }
+func (f *CloudProvider) IgnitionNodeClassReconciler() common.IgnitionNodeClassReconciler { return nil }
