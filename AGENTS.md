@@ -57,7 +57,7 @@ test/                    E2E suites and shared helpers
 Never edit these files directly:
 
 - `api/karpenter/v1/zz_generated.deepcopy.go` and `pkg/apis/autoscaling/v1alpha1/zz_generated.deepcopy.go` — `make generate`
-- `install/00_autoscaling.openshift.io_karpenters.yaml` — `make manifests`
+- `install/00_autoscaling.openshift.io_karpenters.yaml` and `pkg/assets/hypershift/*.yaml` — `make manifests`
 - `pkg/assets/karpenter/*.yaml`, `pkg/assets/aws/*.yaml`, and `pkg/assets/crds/*.yaml` — `make manifest-diff-sync`
 - `install/04_rbac.yaml` — `make manifest-diff-sync`
 
@@ -75,7 +75,7 @@ Stop and ask before:
 ## Paired changes
 
 - Changes under `pkg/apis/autoscaling/` require `make generate && make manifests`.
-- Changes to types under `api/karpenter/` require `make generate`.
+- Changes to types under `api/karpenter/` require `make generate && make manifests`.
 - Operand branch or manifest changes require `make manifest-diff-sync`; review all changes under `pkg/assets/` and `install/04_rbac.yaml`.
 - Dependency changes under `api/` require dependency commands from that module.
 - Run `make verify` before submitting changes.

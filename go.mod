@@ -12,7 +12,7 @@ require (
 	github.com/onsi/gomega v1.42.1
 	github.com/openshift/api v0.0.0-20260805160557-b61243060d5f
 	github.com/openshift/client-go v0.0.0-20260721124015-35d8f3c0e847
-	github.com/openshift/hypershift/api v0.0.0-20260813212031-f7e85cce102c
+	github.com/openshift/hypershift/api v0.0.0-20260923105227-caf541dfb4c0
 	github.com/samber/lo v1.53.0
 	k8s.io/api v0.36.2
 	k8s.io/apiextensions-apiserver v0.36.2

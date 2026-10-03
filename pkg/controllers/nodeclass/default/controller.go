@@ -2,11 +2,11 @@ package defaultnodeclass
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"time"
 
 	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
-	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
+	"github.com/openshift/karpenter-operator/pkg/hypershift"
 
 	hyperv1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
 
@@ -14,7 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -24,11 +23,19 @@ import (
 
 const defaultNodeClassName = "default"
 
+// NodeClassProvider supplies the default NodeClass and watch type for a hosted cluster.
+type NodeClassProvider interface {
+	// DefaultNodeClass returns the target object and mutation function for reconciliation.
+	DefaultNodeClass(infraID string) (client.Object, controllerutil.MutateFn, error)
+	// WatchObject returns an empty typed object used to register the hosted-cluster watch.
+	WatchObject() client.Object
+}
+
 // ControllerConfig configures default NodeClass reconciliation for a hosted cluster.
 type ControllerConfig struct {
 	HostedCluster cluster.Cluster
 	Namespace     string
-	Provider      common.DefaultNodeClassProvider
+	Provider      NodeClassProvider
 }
 
 // Controller reconciles the default NodeClass in a hosted cluster.
@@ -65,13 +72,8 @@ func (c *Controller) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("default NodeClass provider is required")
 	}
 
-	// The HyperShift adapter may install the hosted NodeClass CRD after this operator starts.
-	// Allow the hosted cache to retry discovery before treating startup as failed.
-	// TODO(AUTOSCALE-947): remove or replace once this operator owns the CRD and
-	// installs it before registering this watch.
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(c.Name()).
-		WithOptions(controller.Options{CacheSyncTimeout: 5 * time.Minute}).
 		For(&hyperv1.HostedControlPlane{}, builder.WithPredicates(hcpPredicate())).
 		WatchesRawSource(source.Kind(
 			c.hostedCache.GetCache(),
@@ -111,18 +113,14 @@ func nodeClassPredicate() predicate.Predicate {
 }
 
 func (c *Controller) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result, error) {
-	// Each standalone operator instance is scoped to one HCP namespace with a single HCP resource.
-	hcpList := &hyperv1.HostedControlPlaneList{}
-	if err := c.managementClient.List(ctx, hcpList, client.InNamespace(c.config.Namespace)); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to list hosted control planes: %w", err)
-	}
-	if len(hcpList.Items) == 0 {
+	hcp, err := hypershift.GetHostedControlPlane(ctx, c.managementClient, c.config.Namespace)
+	if errors.Is(err, hypershift.ErrHostedControlPlaneNotFound) {
 		return ctrl.Result{}, nil
 	}
-	if len(hcpList.Items) > 1 {
-		return ctrl.Result{}, fmt.Errorf("expected one hosted control plane in namespace %q, found %d", c.config.Namespace, len(hcpList.Items))
+	if err != nil {
+		return ctrl.Result{}, err
 	}
-	return ctrl.Result{}, c.reconcileHCP(ctx, &hcpList.Items[0])
+	return ctrl.Result{}, c.reconcileHCP(ctx, hcp)
 }
 
 func (c *Controller) reconcileHCP(ctx context.Context, hcp *hyperv1.HostedControlPlane) error {

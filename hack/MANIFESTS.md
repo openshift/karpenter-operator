@@ -43,6 +43,7 @@ and the operator's RBAC requirements.
 | `pkg/assets/aws/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | AWS-specific operand RBAC and EC2NodeClass CRD with OpenShift schema adjustments |
 | `pkg/assets/azure/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | AKSNodeClass CRD |
 | `pkg/assets/crds/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | Core Karpenter CRDs (NodePool, NodeClaim, NodeOverlay) |
+| `pkg/assets/hypershift/*.yaml` | `make manifests` (from `api/karpenter/`) | Operator at runtime (HCP mode) | OpenshiftEC2NodeClass CRD |
 | `install/04_rbac.yaml` | `manifest-diff.sh` | CVO | Operator RBAC + escalation superset |
 
 ## Key concepts

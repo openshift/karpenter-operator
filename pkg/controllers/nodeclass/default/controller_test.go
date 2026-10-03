@@ -6,7 +6,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
-	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 	testfake "github.com/openshift/karpenter-operator/test/pkg/fake"
 
 	hyperv1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
@@ -269,7 +268,7 @@ func TestNodeClassPredicate(t *testing.T) {
 	})
 }
 
-// testDefaultNodeClassProvider is using EC2NodeClass as the platform doesn't really matter for these tests.
+// testDefaultNodeClassProvider supplies default NodeClass behavior for tests.
 type testDefaultNodeClassProvider struct{}
 
 func (testDefaultNodeClassProvider) DefaultNodeClass(infraID string) (client.Object, controllerutil.MutateFn, error) {
@@ -294,7 +293,7 @@ func defaultNodeClassObject() *openshiftkarpenterv1.OpenshiftEC2NodeClass {
 	return &openshiftkarpenterv1.OpenshiftEC2NodeClass{ObjectMeta: metav1.ObjectMeta{Name: defaultNodeClassName}}
 }
 
-func newControllerWithHCPs(t *testing.T, hostedObject client.Object, provider common.DefaultNodeClassProvider, hcps ...*hyperv1.HostedControlPlane) (client.Client, *Controller) {
+func newControllerWithHCPs(t *testing.T, hostedObject client.Object, provider NodeClassProvider, hcps ...*hyperv1.HostedControlPlane) (client.Client, *Controller) {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	g := NewWithT(t)

@@ -103,6 +103,7 @@ generate: $(CONTROLLER_GEN) ## Generate deepcopy methods.
 manifests: $(CONTROLLER_GEN) ## Generate CRD manifests.
 	$(CONTROLLER_GEN) crd paths="./pkg/apis/..." output:crd:artifacts:config=install
 	@mv install/autoscaling.openshift.io_karpenters.yaml install/00_autoscaling.openshift.io_karpenters.yaml
+	$(CONTROLLER_GEN) crd paths="./api/karpenter/..." output:crd:artifacts:config=pkg/assets/hypershift
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.

@@ -19,6 +19,9 @@ const (
 	// UserDataAMILabel is a label set in the userData secret generated for karpenter instances.
 	UserDataAMILabel = "hypershift.openshift.io/ami"
 
+	// ManagedByKarpenterLabel is a label set on the token and userData secrets generated for karpenter instances.
+	ManagedByKarpenterLabel = "hypershift.openshift.io/managed-by-karpenter"
+
 	// ConditionTypeReady is the top-level readiness condition for the OpenshiftEC2NodeClass.
 	// It is computed atomically by the EC2 node class controller, combining the upstream
 	// EC2NodeClass readiness with the VersionResolved condition status.

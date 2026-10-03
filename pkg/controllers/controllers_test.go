@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/openshift/karpenter-operator/pkg/assets"
 	cloudaws "github.com/openshift/karpenter-operator/pkg/cloudprovider/aws"
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/azure"
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
@@ -67,14 +68,14 @@ func TestNewControllers(t *testing.T) {
 			wantControllers:   []string{"crd", "karpenter"},
 		},
 		{
-			name: "When running in HCP AWS mode it should also enable the machine approver and default NodeClass controller",
+			name: "When running in HCP AWS mode it should also enable the machine approver and NodeClass controllers",
 			cloudProvider: &testAWSCloudProvider{CloudProvider: &testfake.CloudProvider{
-				Image:            "test:latest",
-				DefaultNodeClass: (&cloudaws.Provider{}).DefaultNodeClassProvider(),
+				Image:        "test:latest",
+				HCPNodeClass: (&cloudaws.Provider{}).HCPNodeClassProvider(),
 			}},
 			hostedCluster:     &testfake.Cluster{Cl: fakeclient.NewClientBuilder().Build(), Ca: &testfake.Cache{}},
 			managementCluster: true,
-			wantControllers:   []string{"crd", "default-nodeclass", "karpenter", "karpenter-machine-approver"},
+			wantControllers:   []string{"crd", "default-nodeclass", "ec2-nodeclass", "karpenter", "karpenter-machine-approver"},
 		},
 		{
 			name:              "When running in HCP Azure mode it should only enable core controllers",
@@ -105,6 +106,57 @@ func TestNewControllers(t *testing.T) {
 
 			if !slices.Equal(names, tc.wantControllers) {
 				t.Errorf("got controllers %v, want %v", names, tc.wantControllers)
+			}
+		})
+	}
+}
+
+func TestKarpenterCRDs(t *testing.T) {
+	awsProvider := &testfake.CloudProvider{
+		CloudCRDs:    assets.AWSCRDs,
+		HCPNodeClass: (&cloudaws.Provider{}).HCPNodeClassProvider(),
+	}
+	hostedCluster := &testfake.Cluster{Cl: fakeclient.NewClientBuilder().Build(), Ca: &testfake.Cache{}}
+
+	tests := map[string]struct {
+		cloudProvider     common.CloudProvider
+		hostedCluster     cluster.Cluster
+		managementCluster bool
+		wantCRDs          []string
+	}{
+		"When running in standalone AWS mode, it should not install the OpenshiftEC2NodeClass CRD": {
+			cloudProvider: awsProvider,
+			wantCRDs:      []string{"nodepools.karpenter.sh", "nodeclaims.karpenter.sh", "ec2nodeclasses.karpenter.k8s.aws"},
+		},
+		"When running in HCP AWS mode, it should also install the OpenshiftEC2NodeClass CRD": {
+			cloudProvider:     awsProvider,
+			hostedCluster:     hostedCluster,
+			managementCluster: true,
+			wantCRDs:          []string{"nodepools.karpenter.sh", "nodeclaims.karpenter.sh", "ec2nodeclasses.karpenter.k8s.aws", "openshiftec2nodeclasses.karpenter.hypershift.openshift.io"},
+		},
+		"When running in HCP Azure mode, it should only install the Azure CRDs": {
+			cloudProvider:     &azure.Provider{},
+			hostedCluster:     hostedCluster,
+			managementCluster: true,
+			wantCRDs:          []string{"nodepools.karpenter.sh", "nodeclaims.karpenter.sh", "aksnodeclasses.karpenter.azure.com", "nodeoverlays.karpenter.sh"},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cfg := &Config{
+				CloudProvider:     tc.cloudProvider,
+				HostedCluster:     tc.hostedCluster,
+				ManagementCluster: tc.managementCluster,
+			}
+
+			crds := karpenterCRDs(cfg, newHCPNodeClassProvider(cfg))
+			names := lo.Map(crds, func(crd *apiextensionsv1.CustomResourceDefinition, _ int) string {
+				return crd.Name
+			})
+
+			if !slices.Equal(names, tc.wantCRDs) {
+				t.Errorf("got CRDs %v, want %v", names, tc.wantCRDs)
 			}
 		})
 	}

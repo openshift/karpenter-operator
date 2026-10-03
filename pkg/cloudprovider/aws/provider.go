@@ -50,9 +50,9 @@ func New(ctx context.Context, infra common.InfrastructureInfo) (*Provider, error
 	}, nil
 }
 
-// DefaultNodeClassProvider returns the provider's default NodeClass provider.
-func (p *Provider) DefaultNodeClassProvider() common.DefaultNodeClassProvider {
-	return defaultEC2NodeClassProvider{}
+// HCPNodeClassProvider returns the provider's hosted control plane NodeClass provider.
+func (p *Provider) HCPNodeClassProvider() common.HCPNodeClassProvider {
+	return hcpEC2NodeClassProvider{}
 }
 
 // NodeIdentityVerifier returns the provider's node identity verifier.

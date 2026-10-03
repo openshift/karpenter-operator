@@ -10,7 +10,7 @@ import (
 
 func TestDefaultNodeClass(t *testing.T) {
 	g := NewWithT(t)
-	provider := defaultEC2NodeClassProvider{}
+	provider := hcpEC2NodeClassProvider{}
 
 	object, mutate, err := provider.DefaultNodeClass("test-infra")
 	g.Expect(err).NotTo(HaveOccurred())
