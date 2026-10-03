@@ -77,11 +77,11 @@ func TestNewControllers(t *testing.T) {
 			wantControllers:   []string{"crd", "default-nodeclass", "karpenter", "karpenter-machine-approver"},
 		},
 		{
-			name:              "When running in HCP Azure mode it should only enable core controllers",
+			name:              "When running in HCP Azure mode, it should enable HCP-enabled controllers",
 			cloudProvider:     &azure.Provider{},
 			hostedCluster:     &testfake.Cluster{Cl: fakeclient.NewClientBuilder().Build(), Ca: &testfake.Cache{}},
 			managementCluster: true,
-			wantControllers:   []string{"crd", "karpenter"},
+			wantControllers:   []string{"crd", "azure-nodeclass", "azure-nodeclass-vap", "karpenter"},
 		},
 	}
 
@@ -105,6 +105,47 @@ func TestNewControllers(t *testing.T) {
 
 			if !slices.Equal(names, tc.wantControllers) {
 				t.Errorf("got controllers %v, want %v", names, tc.wantControllers)
+			}
+		})
+	}
+}
+
+func TestKarpenterCRDs(t *testing.T) {
+	hostedCluster := &testfake.Cluster{Cl: fakeclient.NewClientBuilder().Build(), Ca: &testfake.Cache{}}
+
+	tests := map[string]struct {
+		cloudProvider     common.CloudProvider
+		hostedCluster     cluster.Cluster
+		managementCluster bool
+		wantCRDs          []string
+	}{
+		"When running in standalone Azure mode, it should only install the Azure CRDs": {
+			cloudProvider: &azure.Provider{},
+			wantCRDs:      []string{"nodepools.karpenter.sh", "nodeclaims.karpenter.sh", "aksnodeclasses.karpenter.azure.com", "nodeoverlays.karpenter.sh"},
+		},
+		"When running in HCP Azure mode, it should also install the OpenShiftAzureNodeClass CRD": {
+			cloudProvider:     &azure.Provider{},
+			hostedCluster:     hostedCluster,
+			managementCluster: true,
+			wantCRDs:          []string{"nodepools.karpenter.sh", "nodeclaims.karpenter.sh", "aksnodeclasses.karpenter.azure.com", "nodeoverlays.karpenter.sh", "openshiftazurenodeclasses.karpenter.hypershift.openshift.io"},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cfg := &Config{
+				CloudProvider:     tc.cloudProvider,
+				HostedCluster:     tc.hostedCluster,
+				ManagementCluster: tc.managementCluster,
+			}
+
+			crds := karpenterCRDs(cfg, newHCPNodeClassProvider(cfg))
+			names := lo.Map(crds, func(crd *apiextensionsv1.CustomResourceDefinition, _ int) string {
+				return crd.Name
+			})
+
+			if !slices.Equal(names, tc.wantCRDs) {
+				t.Errorf("got CRDs %v, want %v", names, tc.wantCRDs)
 			}
 		})
 	}

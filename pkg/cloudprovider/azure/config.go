@@ -11,10 +11,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	azurekarpenterapis "github.com/Azure/karpenter-provider-azure/pkg/apis"
+	azurekarpenterv1beta1 "github.com/Azure/karpenter-provider-azure/pkg/apis/v1beta1"
 )
 
-func (p *Provider) AddToScheme(_ *runtime.Scheme) error {
-	return nil
+func (p *Provider) AddToScheme(s *runtime.Scheme) error {
+	return azurekarpenterv1beta1.SchemeBuilder.AddToScheme(s)
 }
 
 func (p *Provider) KarpenterImage() string {

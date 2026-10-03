@@ -1,6 +1,7 @@
 # github.com/Azure/karpenter-provider-azure v0.0.0 => github.com/openshift/Azure-karpenter-provider-azure v0.0.0-20260826161449-579739a231a1
 ## explicit; go 1.26.4
 github.com/Azure/karpenter-provider-azure/pkg/apis
+github.com/Azure/karpenter-provider-azure/pkg/apis/v1beta1
 # github.com/Masterminds/semver/v3 v3.5.0
 ## explicit; go 1.21
 github.com/Masterminds/semver/v3
@@ -305,6 +306,7 @@ github.com/openshift/hypershift/api/util/ipnet
 # github.com/openshift/karpenter-operator/api v0.0.0 => ./api
 ## explicit; go 1.26.5
 github.com/openshift/karpenter-operator/api/karpenter/v1
+github.com/openshift/karpenter-operator/api/karpenter/v1alpha1
 # github.com/patrickmn/go-cache v2.1.0+incompatible
 ## explicit
 github.com/patrickmn/go-cache

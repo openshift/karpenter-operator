@@ -32,3 +32,4 @@ func (f *CloudProvider) CRDs() []*apiextensionsv1.CustomResourceDefinition { ret
 func (f *CloudProvider) RBAC() common.RBACAssets                           { return f.CloudRBAC }
 func (f *CloudProvider) RelatedObjects() []configv1.ObjectReference        { return f.Objects }
 func (f *CloudProvider) NodeIdentityVerifier() common.NodeIdentityVerifier { return nil }
+func (f *CloudProvider) HCPNodeClassProvider() common.HCPNodeClassProvider { return nil }

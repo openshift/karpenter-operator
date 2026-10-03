@@ -13,6 +13,7 @@ require (
 	github.com/openshift/api v0.0.0-20260805160557-b61243060d5f
 	github.com/openshift/client-go v0.0.0-20260721124015-35d8f3c0e847
 	github.com/openshift/hypershift/api v0.0.0-20260813212031-f7e85cce102c
+	github.com/openshift/karpenter-operator/api v0.0.0
 	github.com/samber/lo v1.53.0
 	k8s.io/api v0.36.2
 	k8s.io/apiextensions-apiserver v0.36.2
@@ -37,7 +38,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.38.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.0 // indirect
 	github.com/aws/smithy-go v1.27.4 // indirect
-	github.com/awslabs/operatorpkg v0.0.0-20260708223819-4da4c353c5fa // indirect
+	github.com/awslabs/operatorpkg v0.0.0-20260708223819-4da4c353c5fa
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

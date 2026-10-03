@@ -59,3 +59,8 @@ func (p *Provider) DefaultNodeClassProvider() common.DefaultNodeClassProvider {
 func (p *Provider) NodeIdentityVerifier() common.NodeIdentityVerifier {
 	return &nodeIdentityVerifier{ec2Client: p.ec2Client}
 }
+
+// HCPNodeClassProvider returns nil when AWS hosted-cluster NodeClass support is unavailable.
+func (p *Provider) HCPNodeClassProvider() common.HCPNodeClassProvider {
+	return nil
+}

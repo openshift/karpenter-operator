@@ -1,0 +1,410 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: openshiftazurenodeclasses.karpenter.hypershift.openshift.io
+spec:
+  group: karpenter.hypershift.openshift.io
+  names:
+    kind: OpenShiftAzureNodeClass
+    listKind: OpenShiftAzureNodeClassList
+    plural: openshiftazurenodeclasses
+    shortNames:
+    - oaznc
+    - oazncs
+    singular: openshiftazurenodeclass
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: OpenShiftAzureNodeClass defines how OpenShift nodes are launched
+          as Azure virtual machines.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              spec defines how the nodes are launched.
+              When omitted, the platform defaults of all fields are used. When set, at least one field must be set.
+            minProperties: 1
+            properties:
+              kubelet:
+                description: |-
+                  kubelet configures the kubelet of the nodes. The settings are delivered through the nodes' ignition configuration.
+                  When omitted, the OpenShift defaults are used. When set, at least one setting must be set,
+                  and maxPods must be between 10 and 250.
+                minProperties: 1
+                properties:
+                  cpuCFSQuota:
+                    description: cpuCFSQuota enables CPU CFS quota enforcement for
+                      containers that specify CPU limits.
+                    type: boolean
+                  evictionHard:
+                    additionalProperties:
+                      description: |-
+                        EvictionThreshold is a threshold value for a kubelet eviction signal.
+                        Values are either a percentage (e.g. "10%") or a Kubernetes quantity (e.g. "100Mi").
+                      maxLength: 64
+                      type: string
+                    description: evictionHard is a map of signal names to quantities
+                      that defines hard eviction thresholds.
+                    maxProperties: 20
+                    minProperties: 1
+                    type: object
+                    x-kubernetes-validations:
+                    - message: valid keys for evictionHard are ['memory.available','nodefs.available','nodefs.inodesFree','imagefs.available','imagefs.inodesFree','pid.available']
+                      rule: self.all(x, x in ['memory.available','nodefs.available','nodefs.inodesFree','imagefs.available','imagefs.inodesFree','pid.available'])
+                    - message: evictionHard values must not be empty
+                      rule: self.all(x, self[x].size() > 0)
+                  evictionMaxPodGracePeriod:
+                    description: |-
+                      evictionMaxPodGracePeriod is the maximum allowed grace period (in seconds) to use
+                      when terminating pods in response to soft eviction thresholds.
+                    format: int32
+                    type: integer
+                  evictionSoft:
+                    additionalProperties:
+                      description: |-
+                        EvictionThreshold is a threshold value for a kubelet eviction signal.
+                        Values are either a percentage (e.g. "10%") or a Kubernetes quantity (e.g. "100Mi").
+                      maxLength: 64
+                      type: string
+                    description: evictionSoft is a map of signal names to quantities
+                      that defines soft eviction thresholds.
+                    maxProperties: 20
+                    minProperties: 1
+                    type: object
+                    x-kubernetes-validations:
+                    - message: valid keys for evictionSoft are ['memory.available','nodefs.available','nodefs.inodesFree','imagefs.available','imagefs.inodesFree','pid.available']
+                      rule: self.all(x, x in ['memory.available','nodefs.available','nodefs.inodesFree','imagefs.available','imagefs.inodesFree','pid.available'])
+                    - message: evictionSoft values must not be empty
+                      rule: self.all(x, self[x].size() > 0)
+                  evictionSoftGracePeriod:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      evictionSoftGracePeriod is a map of signal names to quantities that defines grace periods
+                      for each soft eviction signal.
+                    maxProperties: 20
+                    minProperties: 1
+                    type: object
+                    x-kubernetes-validations:
+                    - message: valid keys for evictionSoftGracePeriod are ['memory.available','nodefs.available','nodefs.inodesFree','imagefs.available','imagefs.inodesFree','pid.available']
+                      rule: self.all(x, x in ['memory.available','nodefs.available','nodefs.inodesFree','imagefs.available','imagefs.inodesFree','pid.available'])
+                  imageGCHighThresholdPercent:
+                    description: |-
+                      imageGCHighThresholdPercent is the percent of disk usage which triggers image garbage collection.
+                      The value must be between 0 and 100, inclusive, and must be greater than imageGCLowThresholdPercent when both are set.
+                    format: int32
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  imageGCLowThresholdPercent:
+                    description: |-
+                      imageGCLowThresholdPercent is the percent of disk usage to which image garbage collection attempts to free.
+                      The value must be between 0 and 100, inclusive, and must be less than imageGCHighThresholdPercent when both are set.
+                    format: int32
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  kubeReserved:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      kubeReserved is a set of ResourceName=ResourceQuantity pairs that describe
+                      resources reserved for kubernetes system components.
+                      Currently only cpu, memory, ephemeral-storage, and pid are supported.
+                    maxProperties: 20
+                    minProperties: 1
+                    type: object
+                    x-kubernetes-validations:
+                    - message: valid keys for kubeReserved are ['cpu','memory','ephemeral-storage','pid']
+                      rule: self.all(x, x=='cpu' || x=='memory' || x=='ephemeral-storage'
+                        || x=='pid')
+                    - message: kubeReserved value cannot be a negative resource quantity
+                      rule: self.all(x, !self[x].startsWith('-'))
+                    - message: kubeReserved values must not be empty
+                      rule: self.all(x, self[x].size() > 0)
+                  maxPods:
+                    description: |-
+                      maxPods is the maximum number of pods that can run on a node.
+                      The value must be between 1 and 2500, inclusive.
+                    format: int32
+                    maximum: 2500
+                    minimum: 1
+                    type: integer
+                  podsPerCore:
+                    description: |-
+                      podsPerCore is the maximum number of pods per core. The value must be between 1 and 2500,
+                      inclusive, and cannot exceed maxPods when both are set.
+                    format: int32
+                    maximum: 2500
+                    minimum: 1
+                    type: integer
+                  systemReserved:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      systemReserved is a set of ResourceName=ResourceQuantity pairs that describe
+                      resources reserved for non-kubernetes components.
+                      Currently only cpu, memory, ephemeral-storage, and pid are supported.
+                    maxProperties: 20
+                    minProperties: 1
+                    type: object
+                    x-kubernetes-validations:
+                    - message: valid keys for systemReserved are ['cpu','memory','ephemeral-storage','pid']
+                      rule: self.all(x, x=='cpu' || x=='memory' || x=='ephemeral-storage'
+                        || x=='pid')
+                    - message: systemReserved value cannot be a negative resource
+                        quantity
+                      rule: self.all(x, !self[x].startsWith('-'))
+                    - message: systemReserved values must not be empty
+                      rule: self.all(x, self[x].size() > 0)
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+                x-kubernetes-validations:
+                - message: maxPods must be between 10 and 250 on Azure
+                  rule: '!has(self.maxPods) || (self.maxPods >= 10 && self.maxPods
+                    <= 250)'
+                - message: imageGCHighThresholdPercent must be greater than imageGCLowThresholdPercent
+                  rule: '!has(self.imageGCHighThresholdPercent) || !has(self.imageGCLowThresholdPercent)
+                    || self.imageGCHighThresholdPercent > self.imageGCLowThresholdPercent'
+                - message: podsPerCore must not exceed maxPods
+                  rule: '!has(self.podsPerCore) || !has(self.maxPods) || self.podsPerCore
+                    <= self.maxPods'
+                - message: evictionSoft entry does not have a matching evictionSoftGracePeriod
+                  rule: '!has(self.evictionSoft) || (has(self.evictionSoftGracePeriod)
+                    && self.evictionSoft.all(e, e in self.evictionSoftGracePeriod))'
+                - message: evictionSoftGracePeriod entry does not have a matching
+                    evictionSoft
+                  rule: '!has(self.evictionSoftGracePeriod) || (has(self.evictionSoft)
+                    && self.evictionSoftGracePeriod.all(e, e in self.evictionSoft))'
+                - message: evictionSoft threshold must be greater than or equal to
+                    evictionHard threshold for the same signal (soft eviction should
+                    fire before hard)
+                  rule: '!has(self.evictionHard) || !has(self.evictionSoft) || self.evictionHard.all(key,
+                    !(key in self.evictionSoft) || ((self.evictionSoft[key].endsWith(''%'')
+                    && self.evictionHard[key].endsWith(''%'')) ? (self.evictionSoft[key].size()
+                    <= 1 || self.evictionHard[key].size() <= 1 || double(self.evictionSoft[key].substring(0,
+                    self.evictionSoft[key].size() - 1)) >= double(self.evictionHard[key].substring(0,
+                    self.evictionHard[key].size() - 1))) : (!(isQuantity(self.evictionSoft[key])
+                    && isQuantity(self.evictionHard[key])) || quantity(self.evictionSoft[key]).compareTo(quantity(self.evictionHard[key]))
+                    >= 0)))'
+              osDiskSizeGiB:
+                description: |-
+                  osDiskSizeGiB is the size of the nodes' operating system disk in GiB, between 30 and 2048.
+                  When omitted, the platform chooses a default, which is subject to change over time. The current default is 120.
+                format: int32
+                maximum: 2048
+                minimum: 30
+                type: integer
+              security:
+                description: |-
+                  security configures security settings of the nodes' virtual machines.
+                  When omitted, the platform defaults are used. When set, at least one setting must be set.
+                minProperties: 1
+                properties:
+                  encryptionAtHost:
+                    description: |-
+                      encryptionAtHost controls encryption at host, which encrypts the temporary disks and disk caches of the nodes'
+                      virtual machines on the host. See https://learn.microsoft.com/en-us/azure/virtual-machines/disk-encryption#encryption-at-host---end-to-end-encryption-for-your-vm-data.
+                      Valid values are "Enabled" and "Disabled". "Enabled" requires the EncryptionAtHost feature on the Azure
+                      subscription and limits the nodes to virtual machine sizes that support it.
+                      When omitted, the platform chooses a default, which is subject to change over time. The current default is "Disabled".
+                    enum:
+                    - Enabled
+                    - Disabled
+                    type: string
+                type: object
+              tags:
+                additionalProperties:
+                  type: string
+                description: |-
+                  tags are Azure tags applied to the nodes' virtual machines and network interfaces.
+                  When set, 1 to 47 tags are allowed: Azure allows 50 tags per resource and the platform adds up to 3.
+                  Keys must be 1-512 characters long and must not contain '<', '>', '%', '&', '\', '?' or '/'.
+                  Values must be at most 256 characters long.
+                  Keys starting with "karpenter.sh_" or "karpenter.azure.com_" and the key "compute.aks.billing" are reserved
+                  for the platform. Like Azure, this check ignores case.
+                maxProperties: 47
+                minProperties: 1
+                type: object
+                x-kubernetes-validations:
+                - message: tag keys must be between 1 and 512 characters long
+                  rule: self.all(k, size(k) >= 1 && size(k) <= 512)
+                - message: tag keys must not contain '<', '>', '%', '&', '?' or '/'
+                  rule: self.all(k, !k.matches('[<>%&?/]'))
+                - message: tag keys must not contain '\'
+                  rule: self.all(k, !k.contains('\\'))
+                - message: tag values must be at most 256 characters long
+                  rule: self.all(k, size(self[k]) <= 256)
+                - message: tag keys starting with 'karpenter.sh_' or 'karpenter.azure.com_'
+                    are reserved
+                  rule: self.all(k, !k.lowerAscii().startsWith('karpenter.sh_') &&
+                    !k.lowerAscii().startsWith('karpenter.azure.com_'))
+                - message: tag key 'compute.aks.billing' is reserved
+                  rule: self.all(k, k.lowerAscii() != 'compute.aks.billing')
+              version:
+                description: |-
+                  version is the OpenShift version of the nodes, e.g. "4.20.1". It must be a semantic version, 5-64 characters long.
+                  When set, the nodes stay on this version when the control plane is upgraded; changing it replaces the nodes.
+                  When omitted, the nodes use the last completed control plane version and are replaced after each
+                  control plane upgrade completes.
+                  The version must be supported by the hosted cluster, and downgrading to a lower minor version is not supported;
+                  otherwise the version is not resolved and the NodeClass is not ready.
+                  Versions outside the supported version skew are accepted and reported through the SupportedVersionSkew condition.
+                maxLength: 64
+                minLength: 5
+                type: string
+                x-kubernetes-validations:
+                - message: version must be a valid semantic version (e.g., 4.20.1)
+                  rule: self.matches('^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$')
+              vnetSubnetID:
+                description: |-
+                  vnetSubnetID is the Azure resource ID of the subnet that the nodes' network interfaces are attached to.
+                  The subnet must be in the virtual network of the hosted cluster. When omitted, the hosted cluster's subnet is used.
+                  It must be at most 355 characters long, in the format
+                  `/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{vnetName}/subnets/{subnetName}`, where:
+                  subscriptionId is a UUID (8-4-4-4-12 hexadecimal characters);
+                  resourceGroupName is 1-90 alphanumeric, '-', '_', '.', '(' or ')' characters and does not end with '.';
+                  vnetName is 2-64 alphanumeric, '-', '_' or '.' characters and does not end with '.' or '-';
+                  subnetName is 1-80 alphanumeric, '-', '_' or '.' characters, starts with an alphanumeric character and does not end with '.' or '-'.
+                maxLength: 355
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: vnetSubnetID must be in the format `/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{vnetName}/subnets/{subnetName}`
+                  rule: size(self.split('/')) == 11 && self.matches('^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.Network/virtualNetworks/[^/]+/subnets/[^/]+$')
+                - message: the subscriptionId in the vnetSubnetID must be a valid
+                    UUID. It must be 5 groups of hyphen separated hexadecimal characters
+                    in the form 8-4-4-4-12
+                  rule: self.split('/')[2].matches('^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')
+                - message: the resourceGroupName in the vnetSubnetID must be between
+                    1 and 90 characters, consisting only of alphanumeric characters,
+                    hyphens, underscores, periods and parentheses
+                  rule: self.split('/')[4].matches('^[a-zA-Z0-9-_\\(\\)\\.]{1,90}$')
+                - message: the resourceGroupName in the vnetSubnetID must not end
+                    with a period (.) character
+                  rule: '!self.split(''/'')[4].endsWith(''.'')'
+                - message: the vnetName in the vnetSubnetID must be between 2 and
+                    64 characters, consisting only of alphanumeric characters, hyphens,
+                    underscores and periods
+                  rule: self.split('/')[8].matches('^[a-zA-Z0-9-_\\.]{2,64}$')
+                - message: the vnetName in the vnetSubnetID must not end with either
+                    a period (.) or hyphen (-) character
+                  rule: '!self.split(''/'')[8].endsWith(''.'') && !self.split(''/'')[8].endsWith(''-'')'
+                - message: the subnetName in the vnetSubnetID must be between 1 and
+                    80 characters, consisting only of alphanumeric characters, hyphens,
+                    underscores and periods and must start with an alphanumeric character
+                  rule: self.split('/')[10].matches('^[a-zA-Z0-9][a-zA-Z0-9-_\\.]{0,79}$')
+                - message: the subnetName in the vnetSubnetID must not end with a
+                    period (.) or hyphen (-) character
+                  rule: '!self.split(''/'')[10].endsWith(''.'') && !self.split(''/'')[10].endsWith(''-'')'
+            type: object
+          status:
+            description: status defines the observed state of the OpenShiftAzureNodeClass.
+            minProperties: 1
+            properties:
+              conditions:
+                description: conditions report the node class's health and readiness.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                maxItems: 100
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              releaseImage:
+                description: |-
+                  releaseImage is the release image of the nodes, e.g. "quay.io/openshift-release-dev/ocp-release@sha256:<digest>",
+                  resolved from spec.version or, when spec.version is omitted, taken from the control plane. At most 512 characters long.
+                maxLength: 512
+                minLength: 1
+                type: string
+              version:
+                description: version is the OpenShift version of status.releaseImage.
+                  At most 64 characters long.
+                maxLength: 64
+                minLength: 1
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

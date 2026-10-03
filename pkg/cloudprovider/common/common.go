@@ -10,7 +10,9 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
@@ -34,6 +36,8 @@ type CloudProvider interface {
 	RBAC() RBACAssets
 	RelatedObjects() []configv1.ObjectReference
 	NodeIdentityVerifier() NodeIdentityVerifier
+	// HCPNodeClassProvider returns nil when platform-specific hosted control plane NodeClass support is unavailable.
+	HCPNodeClassProvider() HCPNodeClassProvider
 }
 
 // NodeIdentityVerifier verifies that a node identity belongs to one or more NodeClaims.
@@ -47,6 +51,20 @@ type DefaultNodeClassProvider interface {
 	DefaultNodeClass(infraID string) (client.Object, controllerutil.MutateFn, error)
 	// WatchObject returns an empty typed object used to register the hosted-cluster watch.
 	WatchObject() client.Object
+}
+
+// HCPNodeClassProvider describes platform-specific NodeClass support for hosted control planes.
+type HCPNodeClassProvider interface {
+	// CRDs returns the platform NodeClass CRDs installed into the hosted cluster.
+	CRDs() []*apiextensionsv1.CustomResourceDefinition
+	// NewControllers returns the controllers reconciling platform NodeClasses in the hosted cluster.
+	NewControllers(hostedCluster cluster.Cluster, namespace string) []NodeClassController
+}
+
+// NodeClassController reconciles platform NodeClasses in the hosted cluster.
+type NodeClassController interface {
+	Name() string
+	SetupWithManager(ctrl.Manager) error
 }
 
 // RBACAssets groups all operand RBAC resources (namespace-scoped and cluster-scoped).
