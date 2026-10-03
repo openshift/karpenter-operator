@@ -31,61 +31,57 @@ LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
-## Tool Binaries
-YQ ?= $(LOCALBIN)/yq
-GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
-HELM ?= $(LOCALBIN)/helm
-CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
-
 ## Tool Versions
 YQ_VERSION            ?= v4.53.6
 GOLANGCI_LINT_VERSION ?= v2.13.2
 HELM_VERSION          ?= v4.3.0
 CONTROLLER_GEN_VERSION ?= v0.22.0
 
+## Tool Binaries
+YQ ?= $(LOCALBIN)/yq-$(YQ_VERSION)
+GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
+HELM ?= $(LOCALBIN)/helm-$(HELM_VERSION)
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen-$(CONTROLLER_GEN_VERSION)
+
 ##@ Tools
 
 .PHONY: yq
 yq: $(YQ) ## Install yq locally if necessary.
+	@ln -sf "$(abspath $(YQ))" "$(LOCALBIN)/yq"
 $(YQ): $(LOCALBIN)
-	@if test -s $(YQ) && $(YQ) --version 2>/dev/null | grep -q "$(YQ_VERSION)"; then \
-	  true; \
-	else \
-	  echo "Installing yq $(YQ_VERSION)..."; \
-	  GOBIN=$(LOCALBIN) GOFLAGS= go install github.com/mikefarah/yq/v4@$(YQ_VERSION); \
-	fi
+	@echo "Installing yq $(YQ_VERSION)..."
+	@rm -f $(LOCALBIN)/yq
+	@GOBIN=$(LOCALBIN) GOFLAGS= go install github.com/mikefarah/yq/v4@$(YQ_VERSION)
+	@mv $(LOCALBIN)/yq $(YQ)
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Install golangci-lint locally if necessary.
+	@ln -sf "$(abspath $(GOLANGCI_LINT))" "$(LOCALBIN)/golangci-lint"
 $(GOLANGCI_LINT): $(LOCALBIN)
-	@if test -s $(GOLANGCI_LINT) && $(GOLANGCI_LINT) version 2>/dev/null | grep -q "$(subst v,,$(GOLANGCI_LINT_VERSION))"; then \
-	  true; \
-	else \
-	  echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."; \
-	  curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(LOCALBIN) $(GOLANGCI_LINT_VERSION); \
-	fi
+	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."
+	@rm -f $(LOCALBIN)/golangci-lint
+	@curl -X GET -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(LOCALBIN) $(GOLANGCI_LINT_VERSION)
+	@mv $(LOCALBIN)/golangci-lint $(GOLANGCI_LINT)
 
 .PHONY: helm
 helm: $(HELM) ## Install helm locally if necessary.
+	@ln -sf "$(abspath $(HELM))" "$(LOCALBIN)/helm"
 $(HELM): $(LOCALBIN)
 	@PLATFORM=$$(uname -s | tr '[:upper:]' '[:lower:]')-$$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/'); \
-	if test -s $(HELM) && $(HELM) version 2>/dev/null | grep -q "$(HELM_VERSION)"; then \
-	  true; \
-	else \
 	  echo "Installing helm $(HELM_VERSION)..."; \
-	  curl -sSL "https://get.helm.sh/helm-$(HELM_VERSION)-$${PLATFORM}.tar.gz" \
+	  rm -f $(LOCALBIN)/helm; \
+	  curl -X GET -sSL "https://get.helm.sh/helm-$(HELM_VERSION)-$${PLATFORM}.tar.gz" \
 	    | tar -xz --strip-components=1 -C $(LOCALBIN) "$${PLATFORM}/helm"; \
-	fi
+	  mv $(LOCALBIN)/helm $(HELM)
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Install controller-gen locally if necessary.
+	@ln -sf "$(abspath $(CONTROLLER_GEN))" "$(LOCALBIN)/controller-gen"
 $(CONTROLLER_GEN): $(LOCALBIN)
-	@if test -s $(CONTROLLER_GEN) && $(CONTROLLER_GEN) --version 2>/dev/null | grep -q "$(CONTROLLER_GEN_VERSION)"; then \
-	  true; \
-	else \
-	  echo "Installing controller-gen $(CONTROLLER_GEN_VERSION)..."; \
-	  GOBIN=$(LOCALBIN) GOFLAGS= go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION); \
-	fi
+	@echo "Installing controller-gen $(CONTROLLER_GEN_VERSION)..."
+	@rm -f $(LOCALBIN)/controller-gen
+	@GOBIN=$(LOCALBIN) GOFLAGS= go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
+	@mv $(LOCALBIN)/controller-gen $(CONTROLLER_GEN)
 
 ##@ Development
 
