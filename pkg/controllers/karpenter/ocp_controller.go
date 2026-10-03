@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/samber/lo"
 )
 
@@ -95,6 +96,9 @@ func (c *OCPController) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Res
 	if err := applyDeployment(ctx, c.client, cfg, ref); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile Deployment: %w", err)
 	}
+	if err := applyPodMonitor(ctx, c.client, cfg, ref); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile PodMonitor: %w", err)
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -114,6 +118,7 @@ func (c *OCPController) SetupWithManager(mgr ctrl.Manager) error {
 		Named(c.Name()).
 		For(&autoscalingv1alpha1.Karpenter{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&monitoringv1.PodMonitor{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).

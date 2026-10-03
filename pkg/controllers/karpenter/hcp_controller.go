@@ -22,6 +22,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
 const (
@@ -136,6 +138,9 @@ func (c *HCPController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if err := applyDeployment(ctx, c.client, cfg, ref); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile Deployment: %w", err)
 	}
+	if err := applyPodMonitor(ctx, c.client, cfg, ref); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile PodMonitor: %w", err)
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -148,6 +153,7 @@ func (c *HCPController) SetupWithManager(mgr ctrl.Manager) error {
 		Named(c.Name()).
 		For(&hyperv1.HostedControlPlane{}, builder.WithPredicates(hcpOperandReconcilePredicate())).
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(karpenterFilterPredicate)).
+		Owns(&monitoringv1.PodMonitor{}, builder.WithPredicates(karpenterFilterPredicate)).
 		Owns(&corev1.ServiceAccount{}, builder.WithPredicates(karpenterFilterPredicate)).
 		Complete(c)
 }

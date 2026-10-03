@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: karpenter-operator
+  namespace: openshift-karpenter
+  annotations:
+    exclude.release.openshift.io/internal-openshift-hosted: "true"
+    include.release.openshift.io/self-managed-high-availability: "true"
+    release.openshift.io/feature-gate: KarpenterOperator
+spec:
+  selector:
+    matchLabels:
+      k8s-app: karpenter-operator
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      scheme: http

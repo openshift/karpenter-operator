@@ -31,6 +31,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	karpenterapis "sigs.k8s.io/karpenter/pkg/apis"
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
 var scheme = runtime.NewScheme()
@@ -42,6 +44,7 @@ func init() {
 	utilruntime.Must(autoscalingv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(openshiftkarpenterv1.AddToScheme(scheme))
 	utilruntime.Must(hyperv1.AddToScheme(scheme))
+	utilruntime.Must(monitoringv1.AddToScheme(scheme))
 
 	karpenterGV := schema.GroupVersion{Group: karpenterapis.Group, Version: "v1"}
 	metav1.AddToGroupVersion(scheme, karpenterGV)

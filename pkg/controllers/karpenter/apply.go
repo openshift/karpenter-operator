@@ -83,3 +83,9 @@ func applyDeployment(ctx context.Context, cl client.Client, cfg *operandConfig, 
 	}
 	return cl.Apply(ctx, dep, client.FieldOwner(fieldManager), client.ForceOwnership)
 }
+
+// applyPodMonitor applies the PodMonitor for the karpenter operand.
+func applyPodMonitor(ctx context.Context, cl client.Client, cfg *operandConfig, ownerRef *metaac.OwnerReferenceApplyConfiguration) error {
+	podMonitor := buildPodMonitor(cfg, ownerRef)
+	return cl.Apply(ctx, podMonitor, client.FieldOwner(fieldManager), client.ForceOwnership)
+}

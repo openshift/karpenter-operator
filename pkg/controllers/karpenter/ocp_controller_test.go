@@ -19,6 +19,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
 const (
@@ -137,6 +139,7 @@ func TestOCPReconcile(t *testing.T) {
 	_ = appsv1.AddToScheme(s)
 	_ = corev1.AddToScheme(s)
 	_ = rbacv1.AddToScheme(s)
+	_ = monitoringv1.AddToScheme(s)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
@@ -186,6 +189,12 @@ func TestOCPReconcile(t *testing.T) {
 			g.Expect(dep.Spec.Template.Spec.Containers[0].Name).To(Equal("karpenter"))
 			g.Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(ocpTestKarpenterImage))
 
+			podMonitor := &monitoringv1.PodMonitor{}
+			g.Expect(controller.client.Get(ctx, client.ObjectKey{
+				Namespace: ocpTestNamespace, Name: karpenterName,
+			}, podMonitor)).To(Succeed())
+			expectKarpenterPodMonitor(g, podMonitor, "Karpenter", autoscalingv1alpha1.SingletonName)
+
 			if tc.expectLogLevelArg != "" {
 				g.Expect(dep.Spec.Template.Spec.Containers[0].Args).To(ContainElement(tc.expectLogLevelArg))
 			}
@@ -234,4 +243,19 @@ func TestOCPReconcile(t *testing.T) {
 			}
 		})
 	}
+}
+
+func expectKarpenterPodMonitor(g Gomega, podMonitor *monitoringv1.PodMonitor, ownerKind, ownerName string) {
+	g.Expect(podMonitor.OwnerReferences).To(HaveLen(1))
+	g.Expect(podMonitor.OwnerReferences[0].Kind).To(Equal(ownerKind))
+	g.Expect(podMonitor.OwnerReferences[0].Name).To(Equal(ownerName))
+	g.Expect(podMonitor.Spec.Selector.MatchLabels).To(Equal(map[string]string{appLabelKey: karpenterName}))
+	g.Expect(podMonitor.Spec.PodMetricsEndpoints).To(HaveLen(1))
+
+	endpoint := podMonitor.Spec.PodMetricsEndpoints[0]
+	g.Expect(endpoint.Port).NotTo(BeNil())
+	g.Expect(*endpoint.Port).To(Equal(metricsPortName))
+	g.Expect(endpoint.Path).To(Equal("/metrics"))
+	g.Expect(endpoint.Scheme).NotTo(BeNil())
+	g.Expect(*endpoint.Scheme).To(Equal(monitoringv1.SchemeHTTP))
 }

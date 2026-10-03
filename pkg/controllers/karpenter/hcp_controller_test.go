@@ -22,6 +22,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
 const (
@@ -264,6 +266,7 @@ func TestHCPReconcile(t *testing.T) {
 	_ = hyperv1.AddToScheme(s)
 	_ = appsv1.AddToScheme(s)
 	_ = corev1.AddToScheme(s)
+	_ = monitoringv1.AddToScheme(s)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
@@ -301,6 +304,10 @@ func TestHCPReconcile(t *testing.T) {
 			sa := &corev1.ServiceAccount{}
 			g.Expect(controller.client.Get(ctx, client.ObjectKey{Namespace: hcpTestNamespace, Name: "karpenter"}, sa)).To(Succeed())
 			expectHCPDeploymentOwnerReference(g, sa, hcpTestHCPName)
+
+			podMonitor := &monitoringv1.PodMonitor{}
+			g.Expect(controller.client.Get(ctx, client.ObjectKey{Namespace: hcpTestNamespace, Name: karpenterName}, podMonitor)).To(Succeed())
+			expectKarpenterPodMonitor(g, podMonitor, "HostedControlPlane", hcpTestHCPName)
 		})
 	}
 }
