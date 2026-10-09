@@ -15,6 +15,8 @@ Controller selection is centralized in [`pkg/controllers/controllers.go`](./pkg/
 
 - `pkg/controllers/crd` installs Karpenter and provider CRDs in both modes, including hosted-control-plane NodeClass CRDs when supported and a hosted-cluster client is configured.
 - `pkg/controllers/karpenter` deploys the operand using `OCPController` in standalone mode and `HCPController` in management-cluster mode.
+- `pkg/controllers/hcp/autonodestatus` reports hosted-cluster counts in `HostedControlPlane.Status.AutoNode`.
+- `pkg/controllers/hcp/deletion` cleans up NodePools/NodeClaims and removes the `HostedControlPlane` finalizer on HCP/CAPI deletion.
 - `pkg/controllers/clusteroperator` reports operator health in standalone mode only.
 - `pkg/controllers/nodeclass/default` reconciles a provider-supplied default NodeClass from `HostedControlPlane` configuration in management-cluster mode. It requires a hosted-cluster client and provider support for hosted-control-plane NodeClasses.
 - `pkg/controllers/nodeclass/ec2` is selected through the AWS NodeClass provider under those same conditions. It reconciles hosted-cluster `OpenshiftEC2NodeClass` resources into operand-facing `EC2NodeClass` resources and maintains the management-cluster subnets ConfigMap.
@@ -38,7 +40,7 @@ Cloud-specific behavior belongs behind `pkg/cloudprovider/common.CloudProvider`;
 cmd/                     Binary entry point
 api/                     Separate Go module for operand-facing APIs
 pkg/apis/autoscaling/    Operator lifecycle API
-pkg/controllers/         Controller wiring; CRD, operand, health, NodeClass, and CSR controllers
+pkg/controllers/         Karpenter deployment and OpenShift integration controllers
 pkg/cloudprovider/       Cloud-provider interface and implementations
 pkg/assets/              Embedded CRDs and RBAC
 install/                 Operator installation manifests
