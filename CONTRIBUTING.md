@@ -81,26 +81,8 @@ To prevent premature merges:
 
 ## Testing
 
-- Unit tests are required for new logic, bug fixes, and behavior changes.
-  `make test` runs tests under `pkg/`.
-- Component or integration tests are recommended when changing interactions between packages.
-- End-to-end tests are expected for new features and significant behavior changes.
-  `make e2e` requires access to a cluster through `KUBECONFIG`.
-- `make karpenter-core-regression` runs the Karpenter core regression suite in the OpenShift Hosted Control Plane CI environment.
-- `make verify` runs vet, lint, unit tests, generation, manifest checks, and verifies that the working tree remains clean.
-
-### Test conventions
-
-See [CONVENTIONS.md](./CONVENTIONS.md#test-conventions) for test naming, table structure, and fixtures.
-
-Before requesting review, run:
-
-```shell
-make build
-make verify
-```
-
-Then inspect the complete diff for unintended changes, credentials, and debug code.
+See [CONVENTIONS.md](./CONVENTIONS.md#test-conventions) for test naming, table structure, and fixture conventions.
+See [TESTING.md](./TESTING.md) for coverage requirements, test workflows, fixture updates, and pre-submission checks.
 
 ## Generated files
 

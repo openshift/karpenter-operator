@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    release.openshift.io/version: 4.21.11
+  labels:
+    app: karpenter
+    hypershift.openshift.io/managed-by: karpenter-operator
+  name: karpenter
+  namespace: clusters-autonode
+  ownerReferences:
+  - apiVersion: hypershift.openshift.io/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: HostedControlPlane
+    name: autonode
+    uid: ea7a5b7d-bd5b-4532-98e4-59a52b52cb74
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: karpenter
+  template:
+    metadata:
+      annotations:
+        openshift.io/required-scc: restricted-v2
+        target.workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
+      labels:
+        app: karpenter
+    spec:
+      containers:
+      - args:
+        - --log-level=debug
+        env:
+        - name: SYSTEM_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CLUSTER_NAME
+          value: autonode
+        - name: CLUSTER_ENDPOINT
+          value: https://api.autonode.hypershift.local:6443
+        - name: DISABLE_WEBHOOK
+          value: "true"
+        - name: HEALTH_PROBE_PORT
+          value: "8081"
+        - name: AWS_REGION
+          value: us-east-1
+        - name: AWS_SHARED_CREDENTIALS_FILE
+          value: /etc/provider/credentials
+        - name: AWS_SDK_LOAD_CONFIG
+          value: "true"
+        - name: KUBECONFIG
+          value: /mnt/kubeconfig/target-kubeconfig
+        - name: DISABLE_LEADER_ELECTION
+          value: "true"
+        image: quay.io/openshift/origin-aws-karpenter-provider-aws:4.21
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+        name: karpenter
+        ports:
+        - containerPort: 8080
+          name: metrics
+        - containerPort: 8081
+          name: http
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          timeoutSeconds: 30
+        resources:
+          requests:
+            cpu: "1"
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - mountPath: /etc/provider
+          name: provider-creds
+          readOnly: true
+        - mountPath: /mnt/kubeconfig
+          name: target-kubeconfig
+          readOnly: true
+        - mountPath: /var/run/secrets/openshift/serviceaccount
+          name: cloud-token
+      initContainers:
+      - args:
+        - --service-account-namespace=kube-system
+        - --service-account-name=karpenter
+        - --token-file=/var/run/secrets/openshift/serviceaccount/token
+        - --kubeconfig=/mnt/kubeconfig/target-kubeconfig
+        command:
+        - /usr/bin/control-plane-operator
+        - token-minter
+        image: quay.io/openshift/origin-hypershift:4.21
+        imagePullPolicy: IfNotPresent
+        name: token-minter
+        resources:
+          requests:
+            cpu: 10m
+            memory: 30Mi
+        restartPolicy: Always
+        startupProbe:
+          exec:
+            command:
+            - test
+            - -f
+            - /var/run/secrets/openshift/serviceaccount/token
+          failureThreshold: 30
+          periodSeconds: 1
+        volumeMounts:
+        - mountPath: /mnt/kubeconfig
+          name: target-kubeconfig
+        - mountPath: /var/run/secrets/openshift/serviceaccount
+          name: cloud-token
+      priorityClassName: system-node-critical
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: karpenter
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: provider-creds
+        secret:
+          secretName: karpenter-credentials
+      - name: target-kubeconfig
+        secret:
+          defaultMode: 416
+          items:
+          - key: value
+            path: target-kubeconfig
+          secretName: autonode-k8r4p-kubeconfig
+      - emptyDir: {}
+        name: cloud-token

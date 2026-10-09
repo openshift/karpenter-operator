@@ -34,6 +34,13 @@ Use `map[string]struct{...}` for table-driven tests, with each test case name as
 Use real-world values in test fixtures when possible, such as `quay.io/openshift-release-dev/ocp-release:4.21.10-x86_64` instead of `example.com/image:latest`.
 Real values catch edge cases that synthetic values miss.
 
+### Fixture tests
+
+- For new cases, exercise actual rendering or reconciliation and use [`testutil.CompareWithFixture`](./test/pkg/testutil/fixtures.go).
+- Objects are marshaled as YAML.
+- Strings and bytes are compared verbatim.
+- Each subtest uses `testdata/zz_fixture_<sanitized test name>.yaml` relative to its package.
+
 ## Code style
 
 - Run `make fmt` for root-module Go changes.
