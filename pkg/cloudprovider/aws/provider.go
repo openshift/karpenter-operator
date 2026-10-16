@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 
@@ -27,10 +28,8 @@ func New(ctx context.Context, infra common.InfrastructureInfo) (*Provider, error
 		return nil, fmt.Errorf("region not available")
 	}
 
-	karpenterImage, err := common.RequireEnv(KarpenterImageEnvName)
-	if err != nil {
-		return nil, err
-	}
+	// Don't fail if the Karpenter image is not set
+	karpenterImage := os.Getenv(KarpenterImageEnvName)
 
 	if _, err := common.RequireEnv(AWSSharedAuthFileEnvName); err != nil {
 		return nil, err

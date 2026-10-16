@@ -41,6 +41,9 @@ type Config struct {
 	// TokenMinterImage is the image used by the token-minter sidecar container in HCP mode.
 	// Required when ManagementCluster is true.
 	TokenMinterImage string
+
+	// DefaultSecurityContextUID sets operand pod runAsUser and fsGroup. Nil leaves them to SCC admission.
+	DefaultSecurityContextUID *int64
 }
 
 func NewControllers(mgr ctrl.Manager, cfg *Config) []Controller {
@@ -72,12 +75,13 @@ func NewControllers(mgr ctrl.Manager, cfg *Config) []Controller {
 		}
 		controllers = append(controllers,
 			karpenter.NewHCPController(mgr.GetClient(), &karpenter.HCPControllerConfig{
-				Namespace:        cfg.Namespace,
-				KarpenterImage:   cfg.KarpenterImage,
-				ClusterName:      cfg.ClusterName,
-				ClusterEndpoint:  cfg.ClusterEndpoint,
-				CloudProvider:    cfg.CloudProvider,
-				TokenMinterImage: cfg.TokenMinterImage,
+				Namespace:                 cfg.Namespace,
+				KarpenterImage:            cfg.KarpenterImage,
+				ClusterName:               cfg.ClusterName,
+				ClusterEndpoint:           cfg.ClusterEndpoint,
+				CloudProvider:             cfg.CloudProvider,
+				TokenMinterImage:          cfg.TokenMinterImage,
+				DefaultSecurityContextUID: cfg.DefaultSecurityContextUID,
 			}),
 		)
 		if cfg.HostedCluster != nil {

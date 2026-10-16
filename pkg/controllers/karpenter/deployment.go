@@ -1,6 +1,8 @@
 package karpenter
 
 import (
+	"fmt"
+
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 
 	corev1 "k8s.io/api/core/v1"
@@ -103,15 +105,25 @@ func buildPodSpec(cfg *operandConfig) (*coreac.PodSpecApplyConfiguration, error)
 		return nil, err
 	}
 
+	securityContext := coreac.PodSecurityContext().
+		WithRunAsNonRoot(true).
+		WithSeccompProfile(coreac.SeccompProfile().
+			WithType(corev1.SeccompProfileTypeRuntimeDefault))
+
+	if uid := cfg.defaultSecurityContextUID; uid != nil {
+		if *uid <= 0 {
+			return nil, fmt.Errorf("operand security context UID must be positive")
+		}
+		// Pod-level runAsUser and fsGroup so Karpenter and token-minter share the UID and
+		// can read the kubeconfig Secret and token volume.
+		securityContext.WithRunAsUser(*uid).WithFSGroup(*uid)
+	}
+
 	return coreac.PodSpec().
 		WithPriorityClassName(karpenterPodPriorityClassName).
 		WithServiceAccountName(karpenterName).
 		WithTerminationGracePeriodSeconds(karpenterPodTerminationGracePeriodSeconds).
-		WithSecurityContext(coreac.PodSecurityContext().
-			WithRunAsNonRoot(true).
-			WithSeccompProfile(coreac.SeccompProfile().
-				WithType(corev1.SeccompProfileTypeRuntimeDefault)),
-		).
+		WithSecurityContext(securityContext).
 		WithInitContainers(inits...).
 		WithContainers(
 			coreac.Container().

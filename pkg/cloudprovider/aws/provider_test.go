@@ -11,41 +11,55 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	tests := []struct {
-		name  string
-		infra common.InfrastructureInfo
-		env   map[string]string
+	const image = "quay.io/openshift/karpenter-provider-aws:latest"
+	tests := map[string]struct {
+		image         string
+		region        string
+		credentials   string
+		expectedError string
 	}{
-		{
-			name: "When AWS env vars are unset it should return an error",
-			infra: common.InfrastructureInfo{
-				PlatformType: configv1.AWSPlatformType,
-				Region:       testAWSRegion,
-				InfraName:    "test-cluster",
-			},
+		"When everything is set, it should construct a provider with expected values": {
+			image:       image,
+			region:      testAWSRegion,
+			credentials: "/path/to/karpenter-test-credentials",
 		},
-		{
-			name: "When region is empty it should return an error",
-			infra: common.InfrastructureInfo{
-				PlatformType: configv1.AWSPlatformType,
-			},
-			env: map[string]string{
-				KarpenterImageEnvName:    testAWSKarpenterImage,
-				AWSSharedAuthFileEnvName: "/etc/aws/credentials",
-			},
+		"When the image is unset, it should not error and construct a provider with an empty image": {
+			image:       "",
+			region:      testAWSRegion,
+			credentials: "/path/to/karpenter-test-credentials",
+		},
+		"When credentials are unset, it should return an error": {
+			image:         image,
+			region:        testAWSRegion,
+			credentials:   "",
+			expectedError: AWSSharedAuthFileEnvName,
+		},
+		"When the region is unset, it should return an error": {
+			image:         image,
+			region:        "",
+			credentials:   "/path/to/karpenter-test-credentials",
+			expectedError: "region not available",
 		},
 	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
 			g := NewWithT(t)
-
-			for key, value := range tc.env {
-				t.Setenv(key, value)
+			t.Setenv(AWSSharedAuthFileEnvName, tc.credentials)
+			t.Setenv(KarpenterImageEnvName, tc.image)
+			p, err := New(t.Context(), common.InfrastructureInfo{
+				PlatformType: configv1.AWSPlatformType,
+				Region:       tc.region,
+				InfraName:    "test-cluster",
+			})
+			if tc.expectedError != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tc.expectedError))
+				g.Expect(p).To(BeNil())
+				return
 			}
-
-			_, err := New(t.Context(), tc.infra)
-			g.Expect(err).To(HaveOccurred())
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(p).NotTo(BeNil())
+			g.Expect(p.KarpenterImage()).To(Equal(tc.image))
 		})
 	}
 }

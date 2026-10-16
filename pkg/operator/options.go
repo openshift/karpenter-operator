@@ -8,6 +8,8 @@ import (
 
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 	"github.com/openshift/karpenter-operator/pkg/controllers"
+
+	"k8s.io/utils/ptr"
 )
 
 // Environment variables consumed by the operator process at startup.
@@ -43,6 +45,10 @@ const (
 	// token-minter init container in the karpenter operand. Required in management
 	// cluster mode.
 	TokenMinterImageEnvName = "TOKEN_MINTER_IMAGE"
+
+	// DefaultSecurityContextUIDEnvName is the non-root UID applied to the operand on
+	// management clusters without SCC. Unset on OpenShift so SCC admission assigns UID and fsGroup.
+	DefaultSecurityContextUIDEnvName = "DEFAULT_SECURITY_CONTEXT_UID"
 )
 
 type Options struct {
@@ -73,6 +79,10 @@ type Options struct {
 	// cluster mode for the karpenter operand's token-minter init container.
 	TokenMinterImage string
 
+	// DefaultSecurityContextUID is read from DEFAULT_SECURITY_CONTEXT_UID. Nil leaves operand
+	// runAsUser and fsGroup to SCC admission.
+	DefaultSecurityContextUID *int64
+
 	MetricsAddr string
 	ProbeAddr   string
 	LeaderElect bool
@@ -92,6 +102,10 @@ func (o *Options) LoadEnv() error {
 	if err != nil {
 		return err
 	}
+	o.DefaultSecurityContextUID, err = parseSecurityContextUID()
+	if err != nil {
+		return fmt.Errorf("loading %s: %w", DefaultSecurityContextUIDEnvName, err)
+	}
 	return nil
 }
 
@@ -99,19 +113,23 @@ func (o *Options) LoadEnv() error {
 // infrastructure and the operator's own settings.
 func (o *Options) ResolveControllerConfig(infra common.InfrastructureInfo, provider common.CloudProvider) *controllers.Config {
 	return &controllers.Config{
-		Namespace:         o.Namespace,
-		KarpenterImage:    provider.KarpenterImage(),
-		ClusterName:       infra.InfraName,
-		ClusterEndpoint:   infra.ClusterEndpoint,
-		ReleaseVersion:    o.ReleaseVersion,
-		ManagementCluster: o.ManagementCluster,
-		CloudProvider:     provider,
-		TokenMinterImage:  o.TokenMinterImage,
+		Namespace:                 o.Namespace,
+		KarpenterImage:            provider.KarpenterImage(),
+		ClusterName:               infra.InfraName,
+		ClusterEndpoint:           infra.ClusterEndpoint,
+		ReleaseVersion:            o.ReleaseVersion,
+		ManagementCluster:         o.ManagementCluster,
+		CloudProvider:             provider,
+		TokenMinterImage:          o.TokenMinterImage,
+		DefaultSecurityContextUID: o.DefaultSecurityContextUID,
 	}
 }
 
-// Validate checks that required pre-Infrastructure-discovery fields are set.
+// Validate checks required fields and value constraints before infrastructure discovery.
 func (o *Options) Validate() error {
+	if ptr.Deref(o.DefaultSecurityContextUID, 1) <= 0 {
+		return fmt.Errorf("%s must be a positive non-root UID", DefaultSecurityContextUIDEnvName)
+	}
 	var missing []string
 	if o.Namespace == "" {
 		missing = append(missing, "--namespace")
@@ -155,4 +173,18 @@ func ParseManagementClusterEnv() (bool, error) {
 		return false, fmt.Errorf("invalid %s value %q: %w", ManagementClusterEnvName, v, err)
 	}
 	return b, nil
+}
+
+// parseSecurityContextUID reads DEFAULT_SECURITY_CONTEXT_UID as an optional integer.
+// Empty returns nil so the operand leaves runAsUser and fsGroup to SCC admission.
+func parseSecurityContextUID() (*int64, error) {
+	v := os.Getenv(DefaultSecurityContextUIDEnvName)
+	if v == "" {
+		return nil, nil
+	}
+	uid, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parsing security context UID: %w", err)
+	}
+	return &uid, nil
 }

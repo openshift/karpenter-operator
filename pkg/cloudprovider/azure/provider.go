@@ -3,6 +3,7 @@ package azure
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 )
@@ -24,10 +25,8 @@ func New(_ context.Context, infra common.InfrastructureInfo) (*Provider, error) 
 		return nil, fmt.Errorf("region not available")
 	}
 
-	karpenterImage, err := common.RequireEnv(KarpenterImageEnvName)
-	if err != nil {
-		return nil, err
-	}
+	// Don't fail if the Karpenter image is not set
+	karpenterImage := os.Getenv(KarpenterImageEnvName)
 	clientID, err := common.RequireEnv(AzureClientIDEnvName)
 	if err != nil {
 		return nil, err
