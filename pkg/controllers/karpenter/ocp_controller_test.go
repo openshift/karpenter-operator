@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/gomega"
 
+	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
 	autoscalingv1alpha1 "github.com/openshift/karpenter-operator/pkg/apis/autoscaling/v1alpha1"
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 	testfake "github.com/openshift/karpenter-operator/test/pkg/fake"
@@ -15,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -83,21 +85,29 @@ func karpenterCR(logLevel autoscalingv1alpha1.KarpenterLogLevel) *autoscalingv1a
 }
 
 func TestOCPReconcile(t *testing.T) {
+	const overrideImage = "quay.io/macao/karpenter-provider-aws:dev"
+	overrideKarpenter := karpenterCR(autoscalingv1alpha1.LogLevelInfo)
+	overrideKarpenter.Annotations = map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: overrideImage}
 	tests := map[string]struct {
-		objects           []client.Object
-		expectErr         bool
-		expectOperands    bool
-		expectLogLevelArg string
-		checkRBAC         bool
-		checkPodSpec      bool
+		objects                     []client.Object
+		configuredImage             *string
+		expectedError               string
+		expectOperands              bool
+		expectLogLevelArg           string
+		checkRBAC                   bool
+		checkPodSpec                bool
+		expectedImageBeforeMutation *string
+		expectedImageAfterMutation  *string
+		mutate                      func(*autoscalingv1alpha1.Karpenter)
 	}{
 		"When Karpenter CR does not exist, it should not create resources": {
 			expectOperands: false,
 		},
 		"When Karpenter CR exists, it should create operand resources and cloud RBAC": {
-			objects:        []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelInfo)},
-			expectOperands: true,
-			checkRBAC:      true,
+			objects:                    []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelInfo)},
+			expectOperands:             true,
+			expectedImageAfterMutation: new(ocpTestKarpenterImage),
+			checkRBAC:                  true,
 		},
 		"When log level is debug, it should pass --log-level=debug": {
 			objects:           []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelDebug)},
@@ -124,6 +134,38 @@ func TestOCPReconcile(t *testing.T) {
 			expectOperands: true,
 			checkPodSpec:   true,
 		},
+		"When the override is added, it should update the Deployment image": {
+			objects:                     []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelInfo)},
+			configuredImage:             new(ocpTestKarpenterImage),
+			expectOperands:              true,
+			expectedImageBeforeMutation: new(ocpTestKarpenterImage),
+			expectedImageAfterMutation:  new(overrideImage),
+			mutate: func(karp *autoscalingv1alpha1.Karpenter) {
+				karp.Annotations = map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: overrideImage}
+			},
+		},
+		"When only an image override is set, it should deploy even if the configured image is not set": {
+			objects:                     []client.Object{overrideKarpenter.DeepCopy()},
+			configuredImage:             new(""),
+			expectOperands:              true,
+			expectedImageBeforeMutation: new(overrideImage),
+		},
+		"When the override is cleared, it should restore the configured image": {
+			objects:                     []client.Object{overrideKarpenter.DeepCopy()},
+			configuredImage:             new(ocpTestKarpenterImage),
+			expectOperands:              true,
+			expectedImageBeforeMutation: new(overrideImage),
+			expectedImageAfterMutation:  new(ocpTestKarpenterImage),
+			mutate: func(karp *autoscalingv1alpha1.Karpenter) {
+				karp.Annotations[openshiftkarpenterv1.KarpenterImageOverrideAnnotation] = ""
+			},
+		},
+		"When both image sources are absent, it should return an error without creating a Deployment": {
+			objects:         []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelInfo)},
+			configuredImage: new(""),
+			expectedError:   "karpenter image is not set",
+			expectOperands:  false,
+		},
 	}
 
 	s := runtime.NewScheme()
@@ -141,16 +183,19 @@ func TestOCPReconcile(t *testing.T) {
 				WithObjects(tc.objects...).
 				Build()
 
-			controller := NewOCPController(c, ocpTestConfig)
+			cfg := *ocpTestConfig
+			cfg.KarpenterImage = ptr.Deref(tc.configuredImage, cfg.KarpenterImage)
+			controller := NewOCPController(c, &cfg)
 
 			ctx := t.Context()
 
 			result, err := controller.Reconcile(ctx, ctrl.Request{})
-			if tc.expectErr {
-				g.Expect(err).To(HaveOccurred())
-				return
+			expectOptionalImage(g, cfg.KarpenterImage, tc.configuredImage)
+			if tc.expectedError != "" {
+				g.Expect(err).To(MatchError(tc.expectedError))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
 			}
-			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(result).To(Equal(ctrl.Result{}))
 
 			depList := &appsv1.DeploymentList{}
@@ -179,7 +224,20 @@ func TestOCPReconcile(t *testing.T) {
 			g.Expect(*dep.Spec.Replicas).To(Equal(int32(1)))
 			g.Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
 			g.Expect(dep.Spec.Template.Spec.Containers[0].Name).To(Equal("karpenter"))
-			g.Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(ocpTestKarpenterImage))
+			expectOptionalImage(g, dep.Spec.Template.Spec.Containers[0].Image, tc.expectedImageBeforeMutation)
+			if tc.mutate != nil {
+				karp := &autoscalingv1alpha1.Karpenter{}
+				g.Expect(controller.client.Get(ctx, client.ObjectKey{Name: autoscalingv1alpha1.SingletonName}, karp)).To(Succeed())
+				tc.mutate(karp)
+				g.Expect(controller.client.Update(ctx, karp)).To(Succeed())
+				result, err = controller.Reconcile(ctx, ctrl.Request{})
+				expectOptionalImage(g, cfg.KarpenterImage, tc.configuredImage)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(result).To(Equal(ctrl.Result{}))
+				g.Expect(controller.client.Get(ctx, client.ObjectKeyFromObject(dep), dep)).To(Succeed())
+			}
+			g.Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
+			expectOptionalImage(g, dep.Spec.Template.Spec.Containers[0].Image, tc.expectedImageAfterMutation)
 
 			podMonitor := &monitoringv1.PodMonitor{}
 			g.Expect(controller.client.Get(ctx, client.ObjectKey{
@@ -234,6 +292,12 @@ func TestOCPReconcile(t *testing.T) {
 				g.Expect(mountNames).To(HaveKey("cloud-creds"))
 			}
 		})
+	}
+}
+
+func expectOptionalImage(g Gomega, actual string, expected *string) {
+	if expected != nil {
+		g.Expect(actual).To(Equal(*expected))
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
 	autoscalingv1alpha1 "github.com/openshift/karpenter-operator/pkg/apis/autoscaling/v1alpha1"
 	"github.com/openshift/karpenter-operator/pkg/assets"
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
@@ -56,6 +57,15 @@ func (c *OCPController) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Res
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	karpenterImage := c.config.KarpenterImage
+	// override Karpenter image if annotation on Karpenter CR exists
+	if karp.Annotations[openshiftkarpenterv1.KarpenterImageOverrideAnnotation] != "" {
+		karpenterImage = karp.Annotations[openshiftkarpenterv1.KarpenterImageOverrideAnnotation]
+	}
+	if karpenterImage == "" {
+		return ctrl.Result{}, fmt.Errorf("karpenter image is not set")
+	}
+
 	ref := ocpOwnerRef(karp)
 	ns := c.config.Namespace
 
@@ -83,7 +93,7 @@ func (c *OCPController) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Res
 
 	cfg := &operandConfig{
 		namespace:       c.config.Namespace,
-		karpenterImage:  c.config.KarpenterImage,
+		karpenterImage:  karpenterImage,
 		clusterName:     c.config.ClusterName,
 		clusterEndpoint: c.config.ClusterEndpoint,
 		cloudProvider:   c.config.CloudProvider,

@@ -30,7 +30,7 @@ Every Go test case name must follow this format:
 ```
 
 Use `map[string]struct{...}` for table-driven tests, with each test case name as its map key.
-Use `want`-prefixed expectation fields; explicitly set at least one relevant expectation per case.
+Use `want`-prefixed or `expect`-prefixed expectation fields; explicitly set at least one relevant expectation per case.
 
 Use real-world values in test fixtures when possible, such as `quay.io/openshift-release-dev/ocp-release:4.21.10-x86_64` instead of `example.com/image:latest`.
 Real values catch edge cases that synthetic values miss.

@@ -126,7 +126,7 @@ manifest-diff-sync: $(YQ) $(HELM) ## Regenerate RBAC manifests from sources.
 	YQ=$(YQ) hack/manifest-diff.sh --sync
 
 .PHONY: verify-git-clean
-verify-git-clean: vendor
+verify-git-clean: deps api-deps
 	git diff-index --cached --quiet --ignore-submodules HEAD --
 	git diff-files --quiet --ignore-submodules
 	git diff --exit-code HEAD --
@@ -151,10 +151,18 @@ verify: vet lint test ## Run all verification checks.
 	$(MAKE) manifest-diff
 	$(MAKE) verify-git-clean
 
-.PHONY: vendor
-vendor: ## Tidy and vendor Go modules.
+.PHONY: deps
+deps: # Updates Go modules
 	go mod tidy
 	go mod vendor
+	go mod verify
+
+.PHONY: api-deps
+api-deps:
+	cd api && \
+		go mod tidy && \
+		go mod vendor && \
+		go mod verify
 
 ##@ Build
 

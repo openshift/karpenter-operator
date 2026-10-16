@@ -6,6 +6,7 @@ import (
 
 	. "github.com/onsi/gomega"
 
+	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 	testfake "github.com/openshift/karpenter-operator/test/pkg/fake"
 	"github.com/openshift/karpenter-operator/test/pkg/testutil"
@@ -19,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	appsac "k8s.io/client-go/applyconfigurations/apps/v1"
+	"k8s.io/utils/ptr"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -173,12 +175,30 @@ func TestHCPOperandReconcilePredicate(t *testing.T) {
 	})
 }
 
+func updateHCPAnnotations(annotations map[string]string) func(context.Context, client.Client) error {
+	return func(ctx context.Context, cl client.Client) error {
+		hcp := &hyperv1beta1.HostedControlPlane{}
+		if err := cl.Get(ctx, hcpReconcileRequest().NamespacedName, hcp); err != nil {
+			return err
+		}
+		hcp.Annotations = annotations
+		return cl.Update(ctx, hcp)
+	}
+}
+
 func TestHCPReconcile(t *testing.T) {
+	const overrideImage = "quay.io/macao/karpenter-provider-aws:dev"
+	overrideHCP := hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter)
+	overrideHCP.Annotations = map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: overrideImage}
 	tests := map[string]struct {
-		objects        []client.Object
-		expectOperands bool
-		mutate         func(context.Context, client.Client) error
-		check          func(Gomega, *appsv1.Deployment, *corev1.ServiceAccount)
+		objects                     []client.Object
+		configuredImage             *string
+		expectedError               string
+		expectOperands              bool
+		expectedImageBeforeMutation *string
+		expectedImageAfterMutation  *string
+		mutate                      func(context.Context, client.Client) error
+		check                       func(Gomega, *appsv1.Deployment, *corev1.ServiceAccount)
 	}{
 		"When HostedControlPlane does not exist, it should not create resources": {
 			expectOperands: false,
@@ -188,8 +208,9 @@ func TestHCPReconcile(t *testing.T) {
 			expectOperands: false,
 		},
 		"When HostedControlPlane uses Karpenter, it should create operand resources owned by the HCP": {
-			objects:        []client.Object{hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter)},
-			expectOperands: true,
+			objects:                    []client.Object{hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter)},
+			expectOperands:             true,
+			expectedImageAfterMutation: new(hcpTestKarpenterImage),
 			check: func(g Gomega, dep *appsv1.Deployment, sa *corev1.ServiceAccount) {
 				for _, obj := range []client.Object{dep, sa} {
 					g.Expect(obj.GetOwnerReferences()).To(HaveLen(1))
@@ -268,6 +289,34 @@ func TestHCPReconcile(t *testing.T) {
 				)))
 			},
 		},
+		"When the override is added, it should update the Deployment image": {
+			objects:                     []client.Object{hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter)},
+			configuredImage:             new(hcpTestKarpenterImage),
+			expectOperands:              true,
+			expectedImageBeforeMutation: new(hcpTestKarpenterImage),
+			expectedImageAfterMutation:  new(overrideImage),
+			mutate:                      updateHCPAnnotations(map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: overrideImage}),
+		},
+		"When only an image override is set, it should deploy even if the configured image is not set": {
+			objects:                     []client.Object{overrideHCP.DeepCopy()},
+			configuredImage:             new(""),
+			expectOperands:              true,
+			expectedImageBeforeMutation: new(overrideImage),
+		},
+		"When the override is cleared, it should restore the configured image": {
+			objects:                     []client.Object{overrideHCP.DeepCopy()},
+			configuredImage:             new(hcpTestKarpenterImage),
+			expectOperands:              true,
+			expectedImageBeforeMutation: new(overrideImage),
+			expectedImageAfterMutation:  new(hcpTestKarpenterImage),
+			mutate:                      updateHCPAnnotations(map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: ""}),
+		},
+		"When both image sources are absent, it should return an error without creating a Deployment": {
+			objects:         []client.Object{hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter)},
+			configuredImage: new(""),
+			expectedError:   "karpenter image is not set",
+			expectOperands:  false,
+		},
 	}
 
 	s := runtime.NewScheme()
@@ -284,29 +333,43 @@ func TestHCPReconcile(t *testing.T) {
 				WithObjects(tc.objects...).
 				Build()
 
-			controller := NewHCPController(c, hcpTestConfig)
+			cfg := *hcpTestConfig
+			cfg.KarpenterImage = ptr.Deref(tc.configuredImage, cfg.KarpenterImage)
+			controller := NewHCPController(c, &cfg)
 
 			ctx := t.Context()
 
 			result, err := controller.Reconcile(ctx, hcpReconcileRequest())
-			g.Expect(err).NotTo(HaveOccurred())
+			expectOptionalImage(g, cfg.KarpenterImage, tc.configuredImage)
+			if tc.expectedError != "" {
+				g.Expect(err).To(MatchError(tc.expectedError))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+			}
 			g.Expect(result).To(Equal(ctrl.Result{}))
 
-			if tc.mutate != nil {
-				g.Expect(tc.mutate(ctx, controller.client)).To(Succeed())
-				result, err = controller.Reconcile(ctx, hcpReconcileRequest())
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(result).To(Equal(ctrl.Result{}))
-			}
-
 			dep := &appsv1.Deployment{}
-			err = controller.client.Get(ctx, client.ObjectKey{Namespace: hcpTestNamespace, Name: "karpenter"}, dep)
+			key := client.ObjectKey{Namespace: hcpTestNamespace, Name: karpenterDeploymentName}
+			err = controller.client.Get(ctx, key, dep)
 			if !tc.expectOperands {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(client.IgnoreNotFound(err)).To(Succeed())
 				return
 			}
 			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
+			expectOptionalImage(g, dep.Spec.Template.Spec.Containers[0].Image, tc.expectedImageBeforeMutation)
+			if tc.mutate != nil {
+				g.Expect(tc.mutate(ctx, controller.client)).To(Succeed())
+				result, err = controller.Reconcile(ctx, hcpReconcileRequest())
+				expectOptionalImage(g, cfg.KarpenterImage, tc.configuredImage)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(result).To(Equal(ctrl.Result{}))
+			}
+
+			g.Expect(controller.client.Get(ctx, key, dep)).To(Succeed())
+			g.Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
+			expectOptionalImage(g, dep.Spec.Template.Spec.Containers[0].Image, tc.expectedImageAfterMutation)
 
 			sa := &corev1.ServiceAccount{}
 			g.Expect(controller.client.Get(ctx, client.ObjectKey{Namespace: hcpTestNamespace, Name: "karpenter"}, sa)).To(Succeed())
@@ -317,6 +380,58 @@ func TestHCPReconcile(t *testing.T) {
 			podMonitor := &monitoringv1.PodMonitor{}
 			g.Expect(controller.client.Get(ctx, client.ObjectKey{Namespace: hcpTestNamespace, Name: karpenterName}, podMonitor)).To(Succeed())
 			expectKarpenterPodMonitor(g, podMonitor, "HostedControlPlane", hcpTestHCPName)
+		})
+	}
+}
+
+func TestHCPImageOverrideReconcilePredicate(t *testing.T) {
+	const image = "quay.io/macao/karpenter-provider-aws:dev"
+	tests := map[string]struct {
+		oldAnnotations map[string]string
+		newAnnotations map[string]string
+		expect         bool
+	}{
+		"When the override is added, it should reconcile": {
+			newAnnotations: map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: image},
+			expect:         true,
+		},
+		"When the override changes, it should reconcile": {
+			oldAnnotations: map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: image},
+			newAnnotations: map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: "quay.io/macao/karpenter-provider-aws:dev-updated"},
+			expect:         true,
+		},
+		"When the override is removed, it should reconcile": {
+			oldAnnotations: map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: image},
+			expect:         true,
+		},
+		"When the override is cleared, it should reconcile": {
+			oldAnnotations: map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: image},
+			newAnnotations: map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: ""},
+			expect:         true,
+		},
+		"When the override is unchanged, it should not reconcile": {
+			oldAnnotations: map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: image},
+			newAnnotations: map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: image},
+			expect:         false,
+		},
+		"When only unrelated annotations change, it should not reconcile": {
+			oldAnnotations: map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: image, "hypershift.openshift.io/karpenter-operator-image": "quay.io/openshift/karpenter-operator:latest"},
+			newAnnotations: map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: image, "hypershift.openshift.io/karpenter-operator-image": "quay.io/openshift/karpenter-operator:main"},
+			expect:         false,
+		},
+		"When an empty override is added, it should not reconcile because the effective image is unchanged": {
+			newAnnotations: map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: ""},
+			expect:         false,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			g := NewWithT(t)
+			oldHCP := hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter)
+			oldHCP.Annotations = tc.oldAnnotations
+			newHCP := oldHCP.DeepCopy()
+			newHCP.Annotations = tc.newAnnotations
+			g.Expect(hcpOperandReconcilePredicate().Update(event.UpdateEvent{ObjectOld: oldHCP, ObjectNew: newHCP})).To(Equal(tc.expect))
 		})
 	}
 }
@@ -332,6 +447,13 @@ func TestReconcileDeployment(t *testing.T) {
 				hcp.Status.ControlPlaneVersion.Desired.Version = "4.21.11"
 				cfg.KarpenterImage = "quay.io/openshift/origin-aws-karpenter-provider-aws:4.21"
 				cfg.TokenMinterImage = "quay.io/openshift/origin-hypershift:4.21"
+			},
+		},
+		"When an image override is set, it should render the override image": {
+			mutate: func(hcp *hyperv1beta1.HostedControlPlane, _ *HCPControllerConfig) {
+				hcp.Annotations = map[string]string{
+					openshiftkarpenterv1.KarpenterImageOverrideAnnotation: "quay.io/macao/karpenter-provider-aws:dev",
+				}
 			},
 		},
 	}

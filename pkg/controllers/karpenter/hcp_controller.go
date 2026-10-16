@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 
 	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
@@ -91,6 +92,15 @@ func (c *HCPController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
+	karpenterImage := c.config.KarpenterImage
+	// override Karpenter image if annotation on HCP exists
+	if hcp.Annotations[openshiftkarpenterv1.KarpenterImageOverrideAnnotation] != "" {
+		karpenterImage = hcp.Annotations[openshiftkarpenterv1.KarpenterImageOverrideAnnotation]
+	}
+	if karpenterImage == "" {
+		return ctrl.Result{}, fmt.Errorf("karpenter image is not set")
+	}
+
 	ref := hcpOwnerRef(hcp)
 
 	if err := applyServiceAccount(ctx, c.client, c.config.Namespace, ref); err != nil {
@@ -99,7 +109,7 @@ func (c *HCPController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	cfg := &operandConfig{
 		namespace:       c.config.Namespace,
-		karpenterImage:  c.config.KarpenterImage,
+		karpenterImage:  karpenterImage,
 		clusterName:     c.config.ClusterName,
 		clusterEndpoint: c.config.ClusterEndpoint,
 		cloudProvider:   c.config.CloudProvider,
@@ -190,9 +200,11 @@ func hcpOperandChanged(oldHCP, newHCP *hyperv1beta1.HostedControlPlane) bool {
 	newVersion := newHCP.Status.ControlPlaneVersion.Desired.Version
 	versionChanged := oldVersion != newVersion
 
-	// Reconcile if EITHER spec OR version changed
-	// (but NOT for other status changes like Ready condition, kubeconfig, etc.)
-	return specChanged || versionChanged
+	imageOverrideChanged := oldHCP.Annotations[openshiftkarpenterv1.KarpenterImageOverrideAnnotation] !=
+		newHCP.Annotations[openshiftkarpenterv1.KarpenterImageOverrideAnnotation]
+
+	// Ignore unrelated annotations and status changes like Ready condition or kubeconfig.
+	return specChanged || versionChanged || imageOverrideChanged
 }
 
 func hcpOwnerRef(hcp *hyperv1beta1.HostedControlPlane) *metaac.OwnerReferenceApplyConfiguration {

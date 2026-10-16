@@ -5,13 +5,13 @@ import (
 )
 
 const (
+	// KarpenterImageOverrideAnnotation overrides the Karpenter operand image that
+	// the operator deploys in Management Cluster mode.
+	KarpenterImageOverrideAnnotation = "autoscaling.openshift.io/karpenter-image"
+
 	// KarpenterCoreE2EOverrideAnnotation is an annotation to be applied to a HostedCluster that allows
 	// overriding the default behavior of the Karpenter Operator for upstream Karpenter core E2E testing purposes.
 	KarpenterCoreE2EOverrideAnnotation = "hypershift.openshift.io/karpenter-core-e2e-override"
-
-	// KarpenterProviderAWSImage overrides the Karpenter AWS provider image to use for
-	// a HostedControlPlane with AutoNode enabled.
-	KarpenterProviderAWSImage = "hypershift.openshift.io/karpenter-provider-aws-image"
 
 	// TokenSecretNodePoolAnnotation is used to annotate the Karpenter token secret with its hyperv1beta1.NodePool namespaced name.
 	TokenSecretNodePoolAnnotation = "hypershift.openshift.io/nodePool"
