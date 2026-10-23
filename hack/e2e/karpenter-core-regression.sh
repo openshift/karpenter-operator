@@ -6,7 +6,8 @@ export HYPERSHIFT_NAMESPACE="$(<"${SHARED_DIR}/management_cluster_namespace")"
 
 # Clone karpenter core fork and vendor it
 dir=$(mktemp -d)
-git clone https://github.com/openshift/kubernetes-sigs-karpenter.git --depth=1 "$dir"
+KARPENTER_CORE_BRANCH=${KARPENTER_CORE_BRANCH:-main}
+git clone https://github.com/openshift/kubernetes-sigs-karpenter.git --depth=1 --branch "$KARPENTER_CORE_BRANCH" "$dir"
 go -C "$dir" mod vendor
 
 # Annotate HCP on management cluster to enable e2e override
@@ -15,8 +16,6 @@ oc annotate -n "${HYPERSHIFT_NAMESPACE}-${CLUSTER}" "hcp/${CLUSTER}" hypershift.
 
 # Switch to guest cluster
 export KUBECONFIG=${SHARED_DIR}/nested_kubeconfig
-oc apply -f pkg/assets/crds/karpenter.sh_nodeoverlays.yaml
-oc delete validatingadmissionpolicybindings.admissionregistration.k8s.io karpenter-binding.ec2nodeclass.hypershift.io
 
 # TODO: Enable additional Karpenter core regression suites as HyperShift support is added.
 # For now, scope this job to the Performance suite.

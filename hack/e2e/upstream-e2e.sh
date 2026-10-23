@@ -14,6 +14,8 @@ fi
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
+oc apply -f "$SCRIPT_DIR/../../pkg/assets/crds/karpenter.sh_nodeoverlays.yaml"
+
 # snapshot the default nodeclass so that the upstream tests can recreate them before each test
 TMPFILE=$(mktemp)
 oc get ec2nodeclasses.karpenter.k8s.aws default -o yaml > "$TMPFILE"
@@ -54,9 +56,31 @@ for cronjob in $(oc get cronjobs -o name); do
   oc patch "$cronjob" -p '{"spec" : {"suspend" : true }}'
 done
 
-# then remove all NodeClasses, VAP, and stray NodePools
-oc delete validatingadmissionpolicies.admissionregistration.k8s.io karpenter.ec2nodeclass.hypershift.io
-oc delete ec2nodeclasses.karpenter.k8s.aws --all --timeout 60s
+# Admission-policy changes can take time to propagate to all API servers.
+delete_with_retry() {
+  local deadline=$((SECONDS + 60)) remaining
+  while true; do
+    remaining=$((deadline - SECONDS))
+    if (( remaining <= 0 )); then
+      echo "Timed out deleting $*" >&2
+      exit 1
+    fi
+    if oc delete "$@" --ignore-not-found --timeout="${remaining}s" --request-timeout="${remaining}s"; then
+      return
+    fi
+    echo "Retrying deletion of $*..."
+    remaining=$((deadline - SECONDS))
+    if (( remaining > 0 )); then
+      sleep "$((remaining < 5 ? remaining : 5))"
+    fi
+  done
+}
+
+# Remove the binding and policy before deleting NodeClasses and stray NodePools.
+delete_with_retry validatingadmissionpolicybindings.admissionregistration.k8s.io karpenter-binding.ec2nodeclass.hypershift.io
+delete_with_retry validatingadmissionpolicies.admissionregistration.k8s.io karpenter.ec2nodeclass.hypershift.io
+sleep 5
+delete_with_retry ec2nodeclasses.karpenter.k8s.aws --all
 oc delete nodepool --all
 
 JUNIT_REPORT=()
