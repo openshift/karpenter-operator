@@ -1661,8 +1661,6 @@ spec:
                     - If Network Plugin is None, the default is 250.
                     - Otherwise, the default is 110 (the usual Kubernetes default).
                 format: int32
-                maximum: 250
-                minimum: 10
                 type: integer
               osDiskSizeGB:
                 default: 128

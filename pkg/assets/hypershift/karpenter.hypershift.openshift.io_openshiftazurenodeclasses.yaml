@@ -53,8 +53,7 @@ spec:
               kubelet:
                 description: |-
                   kubelet configures the kubelet of the nodes. The settings are delivered through the nodes' ignition configuration.
-                  When omitted, the OpenShift defaults are used. When set, at least one setting must be set,
-                  and maxPods must be between 10 and 250.
+                  When omitted, the OpenShift defaults are used. When set, at least one setting must be set.
                 minProperties: 1
                 properties:
                   cpuCFSQuota:
@@ -185,9 +184,6 @@ spec:
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
                 x-kubernetes-validations:
-                - message: maxPods must be between 10 and 250 on Azure
-                  rule: '!has(self.maxPods) || (self.maxPods >= 10 && self.maxPods
-                    <= 250)'
                 - message: imageGCHighThresholdPercent must be greater than imageGCLowThresholdPercent
                   rule: '!has(self.imageGCHighThresholdPercent) || !has(self.imageGCLowThresholdPercent)
                     || self.imageGCHighThresholdPercent > self.imageGCLowThresholdPercent'

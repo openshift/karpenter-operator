@@ -66,9 +66,7 @@ type OpenShiftAzureNodeClassSpec struct {
 	Tags map[string]string `json:"tags,omitempty"`
 
 	// kubelet configures the kubelet of the nodes. The settings are delivered through the nodes' ignition configuration.
-	// When omitted, the OpenShift defaults are used. When set, at least one setting must be set,
-	// and maxPods must be between 10 and 250.
-	// +kubebuilder:validation:XValidation:rule="!has(self.maxPods) || (self.maxPods >= 10 && self.maxPods <= 250)",message="maxPods must be between 10 and 250 on Azure"
+	// When omitted, the OpenShift defaults are used. When set, at least one setting must be set.
 	// +kubebuilder:validation:Type=object
 	// +kubebuilder:validation:MinProperties=1
 	// +optional
