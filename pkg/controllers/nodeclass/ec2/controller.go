@@ -2,7 +2,6 @@ package ec2nodeclass
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -15,17 +14,13 @@ import (
 
 	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
 
-	awskarpenterapis "github.com/aws/karpenter-provider-aws/pkg/apis"
 	awskarpenterv1 "github.com/aws/karpenter-provider-aws/pkg/apis/v1"
 
-	admissionv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/workqueue"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -41,17 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const (
-	finalizer = "hypershift.openshift.io/ec2-nodeclass-finalizer"
-
-	// defaultRootVolumeSize is 120Gi because HCP NodePools provisioned with HCP CLI are set with 120Gi root volume by default.
-	// https://github.com/openshift/hypershift/blob/8be1d9c6f8f79106444e48f2b7d0069b942ba0d7/cmd/nodepool/aws/create.go#L30
-	defaultRootVolumeSize = "120Gi"
-)
-
-// karpenterSubnetsConfigMapName is the ConfigMap in the HCP namespace that lists the subnet IDs
-// resolved by all OpenshiftEC2NodeClasses. The HyperShift operator adds them to the VPC endpoint subnets.
-const karpenterSubnetsConfigMapName = "karpenter-subnets"
+const finalizer = "hypershift.openshift.io/ec2-nodeclass-finalizer"
 
 // EC2NodeClassReconciler reconciles OpenshiftEC2NodeClasses in the hosted cluster into EC2NodeClasses.
 // HostedControlPlanes and user data Secrets are read from the management cluster.
@@ -92,10 +77,6 @@ func (r *EC2NodeClassReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&handler.EnqueueRequestForObject{})).
 		WatchesRawSource(source.Kind[client.Object](hostedCache, &awskarpenterv1.EC2NodeClass{},
 			&handler.EnqueueRequestForObject{})).
-		WatchesRawSource(source.Kind[client.Object](hostedCache, &admissionv1.ValidatingAdmissionPolicy{},
-			handler.EnqueueRequestsFromMapFunc(r.mapVAPToOpenShiftEC2NodeClasses))).
-		WatchesRawSource(source.Kind[client.Object](hostedCache, &admissionv1.ValidatingAdmissionPolicyBinding{},
-			handler.EnqueueRequestsFromMapFunc(r.mapVAPBindingToOpenShiftEC2NodeClasses))).
 		// Watch user data secrets in the management cluster and reconcile the ec2nodeclass they belong to
 		Watches(&corev1.Secret{},
 			hypershift.EnqueueNodeClassForUserDataSecret(),
@@ -128,7 +109,7 @@ func (r *EC2NodeClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			log.V(1).Info("OpenshiftEC2NodeClass not found, aborting reconcile")
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("getting openshiftEC2NodeClass: %w", err)
+		return ctrl.Result{}, fmt.Errorf("getting openshift ec2 nodeclass: %w", err)
 	}
 
 	ec2NodeClass := &awskarpenterv1.EC2NodeClass{
@@ -148,17 +129,11 @@ func (r *EC2NodeClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 		}
 
-		// Update ConfigMap to remove this OpenshiftEC2NodeClass's subnets.
-		// This handles the case where other OpenshiftEC2NodeClass resources still exist.
-		if err := r.reconcileKarpenterSubnetsConfigMap(ctx, hcp); err != nil {
-			return ctrl.Result{}, fmt.Errorf("reconciling karpenter subnets configmap during deletion: %w", err)
-		}
-
 		if controllerutil.ContainsFinalizer(openshiftEC2NodeClass, finalizer) {
 			original := openshiftEC2NodeClass.DeepCopy()
 			controllerutil.RemoveFinalizer(openshiftEC2NodeClass, finalizer)
 			if err := r.hostedClient.Patch(ctx, openshiftEC2NodeClass, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{})); err != nil {
-				return ctrl.Result{}, fmt.Errorf("removing finalizer from openshiftEC2NodeClass: %w", err)
+				return ctrl.Result{}, fmt.Errorf("removing finalizer from openshift ec2 nodeclass: %w", err)
 			}
 		}
 		return ctrl.Result{}, nil
@@ -168,7 +143,7 @@ func (r *EC2NodeClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		original := openshiftEC2NodeClass.DeepCopy()
 		controllerutil.AddFinalizer(openshiftEC2NodeClass, finalizer)
 		if err := r.hostedClient.Patch(ctx, openshiftEC2NodeClass, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{})); err != nil {
-			return ctrl.Result{}, fmt.Errorf("adding finalizer to openshiftEC2NodeClass: %w", err)
+			return ctrl.Result{}, fmt.Errorf("adding finalizer to openshift ec2 nodeclass: %w", err)
 		}
 	}
 
@@ -183,30 +158,12 @@ func (r *EC2NodeClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	op, err := controllerutil.CreateOrUpdate(ctx, r.hostedClient, ec2NodeClass, func() error {
-		if err := controllerutil.SetControllerReference(openshiftEC2NodeClass, ec2NodeClass, r.hostedClient.Scheme()); err != nil {
-			return err
-		}
-		return reconcileEC2NodeClass(ctx, ec2NodeClass, openshiftEC2NodeClass, hcp, userDataSecret)
-	})
+	ec2NodeClass, err = r.reconcileEC2NodeClass(ctx, openshiftEC2NodeClass, hcp, userDataSecret)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	// Updates are not logged: the API server defaults fields the desired spec leaves unset,
-	// so CreateOrUpdate reports an update on every reconcile.
-	if op == controllerutil.OperationResultCreated {
-		log.Info("Created EC2NodeClass", "ec2nodeclass", ec2NodeClass.Name)
-	}
 
 	if err := r.reconcileStatus(ctx, ec2NodeClass, openshiftEC2NodeClass, hcp); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if err := r.reconcileKarpenterSubnetsConfigMap(ctx, hcp); err != nil {
-		return ctrl.Result{}, fmt.Errorf("reconciling karpenter subnets configmap: %w", err)
-	}
-
-	if err := r.reconcileVAP(ctx); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -233,109 +190,28 @@ func deleteIfNeeded(ctx context.Context, c client.Client, o client.Object) (exis
 	return true, nil
 }
 
-func reconcileEC2NodeClass(ctx context.Context, ec2NodeClass *awskarpenterv1.EC2NodeClass, openshiftEC2NodeClass *openshiftkarpenterv1.OpenshiftEC2NodeClass, hcp *hyperv1beta1.HostedControlPlane, userDataSecret *corev1.Secret) error { //nolint:gocyclo
-	var amiSelectorTerms []awskarpenterv1.AMISelectorTerm
-
-	userData := new(string(userDataSecret.Data["value"]))
-
-	// When upgrade is in progress, and the nodeclass is tied to the control plane version, and the EC2NodeClass already has AMI/UserData set
-	// (i.e. not the first creation), preserve the existing drift-triggering fields that cause a node rollout upgrade.
-	if hypershift.WaitsForControlPlaneUpgrade(hcp, openshiftEC2NodeClass.Spec.Version) && len(ec2NodeClass.Spec.AMISelectorTerms) > 0 && ec2NodeClass.Spec.UserData != nil {
-		ctrl.LoggerFrom(ctx).V(1).Info("Control plane upgrade in progress, preserving existing userData and amis")
-		userData = ec2NodeClass.Spec.UserData
-		amiSelectorTerms = ec2NodeClass.Spec.AMISelectorTerms
-	} else {
-		var err error
-		amiSelectorTerms, err = amiSelectorTermsFromUserDataSecret(userDataSecret)
-		if err != nil {
-			return fmt.Errorf("getting AMISelectorTerms: %w", err)
+// reconcileEC2NodeClass creates or updates the EC2NodeClass of the OpenshiftEC2NodeClass with the user data and AMIs
+// produced by the ignition pipeline.
+func (r *EC2NodeClassReconciler) reconcileEC2NodeClass(ctx context.Context, nodeClass *openshiftkarpenterv1.OpenshiftEC2NodeClass, hcp *hyperv1beta1.HostedControlPlane, userDataSecret *corev1.Secret) (*awskarpenterv1.EC2NodeClass, error) {
+	ec2NodeClass := &awskarpenterv1.EC2NodeClass{}
+	ec2NodeClass.Name = nodeClass.Name
+	op, err := controllerutil.CreateOrUpdate(ctx, r.hostedClient, ec2NodeClass, func() error {
+		current := ec2NodeClass.Spec
+		ec2NodeClass.Spec = ec2NodeClassSpec(ctx, nodeClass, hcp)
+		if err := reconcileEC2NodeClassRelease(ctx, &ec2NodeClass.Spec, current, nodeClass, hcp, userDataSecret); err != nil {
+			return err
 		}
+		return controllerutil.SetControllerReference(nodeClass, ec2NodeClass, r.hostedClient.Scheme())
+	})
+	if err != nil {
+		return nil, fmt.Errorf("reconciling ec2 nodeclass: %w", err)
 	}
-
-	ec2NodeClass.Spec = awskarpenterv1.EC2NodeClassSpec{
-		UserData:                         userData,
-		AMIFamily:                        new("Custom"),
-		AMISelectorTerms:                 amiSelectorTerms,
-		AssociatePublicIPAddress:         karpenterAssociatePublicIPAddressFromNodeClassSpec(openshiftEC2NodeClass.Spec),
-		Tags:                             mergeEC2NodeClassTags(ctx, openshiftEC2NodeClass, hcp),
-		DetailedMonitoring:               karpenterDetailedMonitoringFromNodeClassSpec(openshiftEC2NodeClass.Spec),
-		BlockDeviceMappings:              karpenterBlockDeviceMappingFromNodeClassSpec(openshiftEC2NodeClass.Spec),
-		InstanceStorePolicy:              karpenterInstanceStorePolicyFromNodeClassSpec(openshiftEC2NodeClass.Spec),
-		MetadataOptions:                  karpenterMetadataOptionsFromNodeClassSpec(openshiftEC2NodeClass.Spec),
-		CapacityReservationSelectorTerms: karpenterCapacityReservationSelectorTermsFromNodeClassSpec(openshiftEC2NodeClass.Spec),
-		Kubelet:                          karpenterKubeletConfigurationFromNodeClassSpec(openshiftEC2NodeClass.Spec),
+	// Updates are not logged: the API server defaults fields the desired spec leaves unset,
+	// so CreateOrUpdate reports an update on every reconcile.
+	if op == controllerutil.OperationResultCreated {
+		ctrl.LoggerFrom(ctx).Info("Created EC2NodeClass", "ec2nodeclass", ec2NodeClass.Name)
 	}
-
-	// Set instance profile from HostedCluster annotation (platform-controlled)
-	if instanceProfile, ok := hcp.Annotations[hyperv1beta1.AWSKarpenterDefaultInstanceProfile]; ok && instanceProfile != "" {
-		ec2NodeClass.Spec.InstanceProfile = new(instanceProfile)
-	}
-
-	// Set default BlockDeviceMappings if not specified in OpenshiftEC2NodeClass.
-	if ec2NodeClass.Spec.BlockDeviceMappings == nil {
-		ec2NodeClass.Spec.BlockDeviceMappings = []*awskarpenterv1.BlockDeviceMapping{
-			{
-				DeviceName: new("/dev/xvda"),
-				EBS: &awskarpenterv1.BlockDevice{
-					VolumeSize: new(resource.MustParse(defaultRootVolumeSize)),
-					VolumeType: new("gp3"),
-					Encrypted:  new(true),
-				},
-			},
-		}
-	}
-
-	var subnetSelectorTerms []awskarpenterv1.SubnetSelectorTerm
-	if openshiftEC2NodeClass.Spec.SubnetSelectorTerms != nil {
-		for _, term := range openshiftEC2NodeClass.Spec.SubnetSelectorTerms {
-			subnetSelectorTerms = append(subnetSelectorTerms, awskarpenterv1.SubnetSelectorTerm{
-				Tags: term.Tags,
-				ID:   term.ID,
-			})
-		}
-	} else {
-		subnetSelectorTerms = []awskarpenterv1.SubnetSelectorTerm{
-			{
-				Tags: DefaultSubnetSelectorTags(hcp.Spec.InfraID),
-			},
-		}
-	}
-	ec2NodeClass.Spec.SubnetSelectorTerms = subnetSelectorTerms
-
-	var securityGroupSelectorTerms []awskarpenterv1.SecurityGroupSelectorTerm
-	if openshiftEC2NodeClass.Spec.SecurityGroupSelectorTerms != nil {
-		for _, term := range openshiftEC2NodeClass.Spec.SecurityGroupSelectorTerms {
-			securityGroupSelectorTerms = append(securityGroupSelectorTerms, awskarpenterv1.SecurityGroupSelectorTerm{
-				Tags: term.Tags,
-				ID:   term.ID,
-				Name: term.Name,
-			})
-		}
-	} else {
-		securityGroupSelectorTerms = []awskarpenterv1.SecurityGroupSelectorTerm{
-			{
-				Tags: DefaultSecurityGroupSelectorTags(hcp.Spec.InfraID),
-			},
-		}
-	}
-	ec2NodeClass.Spec.SecurityGroupSelectorTerms = securityGroupSelectorTerms
-
-	return nil
-}
-
-// DefaultSubnetSelectorTags returns the tags selecting the private subnets of the hosted cluster.
-func DefaultSubnetSelectorTags(infraID string) map[string]string {
-	return map[string]string{
-		"kubernetes.io/role/internal-elb":                "1",
-		fmt.Sprintf("kubernetes.io/cluster/%s", infraID): "*",
-	}
-}
-
-// DefaultSecurityGroupSelectorTags returns the tags selecting the default security group of the hosted cluster.
-func DefaultSecurityGroupSelectorTags(infraID string) map[string]string {
-	return map[string]string{
-		"karpenter.sh/discovery": infraID,
-	}
+	return ec2NodeClass, nil
 }
 
 func (r *EC2NodeClassReconciler) reconcileStatus(ctx context.Context, ec2NodeClass *awskarpenterv1.EC2NodeClass, openshiftNodeClass *openshiftkarpenterv1.OpenshiftEC2NodeClass, hcp *hyperv1beta1.HostedControlPlane) error {
@@ -399,149 +275,6 @@ func (r *EC2NodeClassReconciler) reconcileStatus(ctx context.Context, ec2NodeCla
 	return nil
 }
 
-func (r *EC2NodeClassReconciler) reconcileKarpenterSubnetsConfigMap(ctx context.Context, hcp *hyperv1beta1.HostedControlPlane) error { //nolint:gocyclo
-	log := ctrl.LoggerFrom(ctx)
-
-	// List all OpenshiftEC2NodeClass resources in hosted cluster
-	openshiftEC2NodeClassList := &openshiftkarpenterv1.OpenshiftEC2NodeClassList{}
-	if err := r.hostedClient.List(ctx, openshiftEC2NodeClassList); err != nil {
-		return fmt.Errorf("listing OpenshiftEC2NodeClass: %w", err)
-	}
-
-	subnetIDSet := sets.NewString()
-	for _, nodeClass := range openshiftEC2NodeClassList.Items {
-		// Skip NodeClasses that are being deleted — their subnets should no
-		// longer be propagated to VPC endpoints.
-		if !nodeClass.DeletionTimestamp.IsZero() {
-			continue
-		}
-		for _, subnet := range nodeClass.Status.Subnets {
-			if subnet.ID != "" {
-				subnetIDSet.Insert(subnet.ID)
-			}
-		}
-	}
-
-	subnetIDs := subnetIDSet.List() // Sorted list
-
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      karpenterSubnetsConfigMapName,
-			Namespace: r.namespace,
-		},
-	}
-
-	// If there are no OpenshiftEC2NodeClass resources with resolved subnets,
-	// delete the ConfigMap (no NodeClasses exist, or none have subnets in status yet).
-	// The ConfigMap is also cleaned up automatically via owner reference when HCP is deleted.
-	if subnetIDSet.Len() == 0 {
-		exists, err := deleteIfNeeded(ctx, r.managementClient, configMap)
-		if err != nil {
-			return fmt.Errorf("deleting karpenter subnets configmap: %w", err)
-		}
-		if exists {
-			log.Info("Deleted karpenter subnets configmap, no OpenshiftEC2NodeClass resources with resolved subnets exist", "configmap", client.ObjectKeyFromObject(configMap))
-		}
-		return nil
-	}
-
-	// Create or update ConfigMap in management cluster
-
-	op, err := controllerutil.CreateOrUpdate(ctx, r.managementClient, configMap, func() error {
-		// Set owner reference to HostedControlPlane for automatic cleanup
-		if err := controllerutil.SetControllerReference(hcp, configMap, r.managementClient.Scheme()); err != nil {
-			return err
-		}
-
-		if configMap.Labels == nil {
-			configMap.Labels = make(map[string]string)
-		}
-		configMap.Labels["hypershift.openshift.io/managed-by"] = "karpenter"
-		configMap.Labels["hypershift.openshift.io/infra-id"] = hcp.Spec.InfraID
-
-		if configMap.Data == nil {
-			configMap.Data = make(map[string]string)
-		}
-
-		// Store as JSON array
-		subnetIDsJSON, err := json.Marshal(subnetIDs)
-		if err != nil {
-			return fmt.Errorf("marshaling subnet IDs: %w", err)
-		}
-		configMap.Data["subnetIDs"] = string(subnetIDsJSON)
-
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("reconciling karpenter subnets configmap: %w", err)
-	}
-
-	switch op {
-	case controllerutil.OperationResultCreated:
-		log.Info("Created karpenter subnets configmap", "configmap", client.ObjectKeyFromObject(configMap), "subnet count", len(subnetIDs))
-	case controllerutil.OperationResultUpdated:
-		log.Info("Updated karpenter subnets configmap", "configmap", client.ObjectKeyFromObject(configMap), "subnet count", len(subnetIDs))
-	}
-	return nil
-}
-
-func (r *EC2NodeClassReconciler) reconcileVAP(ctx context.Context) error {
-	vap := &admissionv1.ValidatingAdmissionPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "karpenter.ec2nodeclass.hypershift.io",
-		},
-	}
-
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.hostedClient, vap, func() error {
-		vap.Spec.MatchConstraints = &admissionv1.MatchResources{
-			ResourceRules: []admissionv1.NamedRuleWithOperations{
-				{
-					RuleWithOperations: admissionv1.RuleWithOperations{
-						Operations: []admissionv1.OperationType{
-							admissionv1.OperationAll,
-						},
-						Rule: admissionv1.Rule{
-							APIGroups:   []string{awskarpenterapis.Group},
-							APIVersions: []string{"v1"},
-							Resources:   []string{"ec2nodeclasses"},
-						},
-					},
-				},
-			},
-		}
-		vap.Spec.MatchConditions = []admissionv1.MatchCondition{
-			{
-				Name:       "exclude-hcco-user",
-				Expression: "'system:hosted-cluster-config' != request.userInfo.username",
-			},
-		}
-
-		vap.Spec.Validations = []admissionv1.Validation{
-			{
-				Expression: "has(oldObject.spec) && has(object.spec) && object.spec == oldObject.spec",
-				Message:    "EC2NodeClass resource can't be created/updated/deleted directly, please use OpenshiftEC2NodeClass resource instead",
-			},
-		}
-
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	vapBinding := &admissionv1.ValidatingAdmissionPolicyBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "karpenter-binding.ec2nodeclass.hypershift.io",
-		},
-	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.hostedClient, vapBinding, func() error {
-		vapBinding.Spec.PolicyName = vap.Name
-		vapBinding.Spec.ValidationActions = []admissionv1.ValidationAction{admissionv1.Deny}
-		return nil
-	})
-
-	return err
-}
-
 // hcpPredicate filters HostedControlPlane events to changes that affect EC2NodeClasses.
 func (r *EC2NodeClassReconciler) hcpPredicate() predicate.Predicate {
 	return predicate.Funcs{
@@ -568,20 +301,6 @@ func awsResourceTags(hcp *hyperv1beta1.HostedControlPlane) []hyperv1beta1.AWSClu
 		return nil
 	}
 	return hcp.Spec.Platform.AWS.ResourceTags
-}
-
-func (r *EC2NodeClassReconciler) mapVAPToOpenShiftEC2NodeClasses(ctx context.Context, o client.Object) []ctrl.Request {
-	if o.GetName() != "karpenter.ec2nodeclass.hypershift.io" {
-		return nil
-	}
-	return r.mapToOpenShiftEC2NodeClasses(ctx, o)
-}
-
-func (r *EC2NodeClassReconciler) mapVAPBindingToOpenShiftEC2NodeClasses(ctx context.Context, o client.Object) []ctrl.Request {
-	if o.GetName() != "karpenter-binding.ec2nodeclass.hypershift.io" {
-		return nil
-	}
-	return r.mapToOpenShiftEC2NodeClasses(ctx, o)
 }
 
 // mapToOpenShiftEC2NodeClasses maps a request to all OpenshiftEC2NodeClass resources

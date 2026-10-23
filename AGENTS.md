@@ -19,8 +19,10 @@ Controller selection is centralized in [`pkg/controllers/controllers.go`](./pkg/
 - `pkg/controllers/hcp/deletion` cleans up NodePools/NodeClaims and removes the `HostedControlPlane` finalizer on HCP/CAPI deletion.
 - `pkg/controllers/clusteroperator` reports operator health in standalone mode only.
 - `pkg/controllers/nodeclass/default` reconciles a provider-supplied default NodeClass from `HostedControlPlane` configuration in management-cluster mode. It requires a hosted-cluster client and provider support for hosted-control-plane NodeClasses.
-- `pkg/controllers/nodeclass/ec2` is selected through the AWS NodeClass provider under those same conditions. It reconciles hosted-cluster `OpenshiftEC2NodeClass` resources into operand-facing `EC2NodeClass` resources and maintains the management-cluster subnets ConfigMap.
+- `pkg/controllers/nodeclass/ec2` is selected through the AWS NodeClass provider under those same conditions. It reconciles hosted-cluster `OpenshiftEC2NodeClass` resources into operand-facing `EC2NodeClass` resources.
+- `pkg/controllers/nodeclass/ec2/subnet` aggregates resolved EC2 NodeClass subnet IDs into the management-cluster `karpenter-subnets` ConfigMap.
 - `pkg/controllers/nodeclass/azure` is selected through the Azure NodeClass provider under those same conditions. It reconciles hosted-cluster `OpenShiftAzureNodeClass` resources into operand-facing `AKSNodeClass` resources.
+- `pkg/controllers/nodeclass/vap` reconciles a cloud-provider-configured `ValidatingAdmissionPolicy` and binding that prevent direct changes to operand-facing NodeClasses in the hosted cluster.
 - `pkg/controllers/machineapprover` approves CSRs for Karpenter-provisioned nodes in management-cluster mode, when a hosted-cluster client and a provider-supplied node identity verifier are available.
 
 In standalone mode, the operand controller reconciles the singleton `autoscaling.openshift.io/v1alpha1` `Karpenter` resource named `default`.

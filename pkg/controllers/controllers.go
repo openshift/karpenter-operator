@@ -69,7 +69,7 @@ func NewControllers(mgr ctrl.Manager, cfg *Config) []Controller {
 					Provider:      hcpNodeClassProvider,
 				}),
 			)
-			for _, controller := range hcpNodeClassProvider.NewControllers(cfg.HostedCluster, cfg.Namespace) {
+			for _, controller := range hcpNodeClassProvider.NewControllers(mgr, cfg.HostedCluster, cfg.Namespace) {
 				controllers = append(controllers, controller)
 			}
 		}

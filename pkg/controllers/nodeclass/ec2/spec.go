@@ -1,17 +1,123 @@
 package ec2nodeclass
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
+	"github.com/openshift/karpenter-operator/pkg/hypershift"
+
+	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
 
 	awskarpenterv1 "github.com/aws/karpenter-provider-aws/pkg/apis/v1"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+// defaultRootVolumeSize is 120Gi because HCP NodePools provisioned with HCP CLI are set with 120Gi root volume by default.
+// https://github.com/openshift/hypershift/blob/8be1d9c6f8f79106444e48f2b7d0069b942ba0d7/cmd/nodepool/aws/create.go#L30
+const defaultRootVolumeSize = "120Gi"
+
+// ec2NodeClassSpec returns the EC2NodeClass spec for an OpenshiftEC2NodeClass.
+// The AMIs and user data are left unset; they come from the ignition pipeline.
+func ec2NodeClassSpec(ctx context.Context, nodeClass *openshiftkarpenterv1.OpenshiftEC2NodeClass, hcp *hyperv1beta1.HostedControlPlane) awskarpenterv1.EC2NodeClassSpec {
+	spec := awskarpenterv1.EC2NodeClassSpec{
+		AMIFamily:                        new("Custom"),
+		AssociatePublicIPAddress:         karpenterAssociatePublicIPAddressFromNodeClassSpec(nodeClass.Spec),
+		Tags:                             mergeEC2NodeClassTags(ctx, nodeClass, hcp),
+		DetailedMonitoring:               karpenterDetailedMonitoringFromNodeClassSpec(nodeClass.Spec),
+		BlockDeviceMappings:              karpenterBlockDeviceMappingFromNodeClassSpec(nodeClass.Spec),
+		InstanceStorePolicy:              karpenterInstanceStorePolicyFromNodeClassSpec(nodeClass.Spec),
+		MetadataOptions:                  karpenterMetadataOptionsFromNodeClassSpec(nodeClass.Spec),
+		CapacityReservationSelectorTerms: karpenterCapacityReservationSelectorTermsFromNodeClassSpec(nodeClass.Spec),
+		Kubelet:                          karpenterKubeletConfigurationFromNodeClassSpec(nodeClass.Spec),
+	}
+
+	// The instance profile is platform-controlled through the HostedCluster.
+	if instanceProfile := hcp.Annotations[hyperv1beta1.AWSKarpenterDefaultInstanceProfile]; instanceProfile != "" {
+		spec.InstanceProfile = new(instanceProfile)
+	}
+
+	if spec.BlockDeviceMappings == nil {
+		spec.BlockDeviceMappings = []*awskarpenterv1.BlockDeviceMapping{{
+			DeviceName: new("/dev/xvda"),
+			EBS: &awskarpenterv1.BlockDevice{
+				VolumeSize: new(resource.MustParse(defaultRootVolumeSize)),
+				VolumeType: new("gp3"),
+				Encrypted:  new(true),
+			},
+		}}
+	}
+
+	if nodeClass.Spec.SubnetSelectorTerms == nil {
+		spec.SubnetSelectorTerms = []awskarpenterv1.SubnetSelectorTerm{{
+			Tags: DefaultSubnetSelectorTags(hcp.Spec.InfraID),
+		}}
+	} else {
+		for _, term := range nodeClass.Spec.SubnetSelectorTerms {
+			spec.SubnetSelectorTerms = append(spec.SubnetSelectorTerms, awskarpenterv1.SubnetSelectorTerm{
+				Tags: term.Tags,
+				ID:   term.ID,
+			})
+		}
+	}
+
+	if nodeClass.Spec.SecurityGroupSelectorTerms == nil {
+		spec.SecurityGroupSelectorTerms = []awskarpenterv1.SecurityGroupSelectorTerm{{
+			Tags: DefaultSecurityGroupSelectorTags(hcp.Spec.InfraID),
+		}}
+	} else {
+		for _, term := range nodeClass.Spec.SecurityGroupSelectorTerms {
+			spec.SecurityGroupSelectorTerms = append(spec.SecurityGroupSelectorTerms, awskarpenterv1.SecurityGroupSelectorTerm{
+				Tags: term.Tags,
+				ID:   term.ID,
+				Name: term.Name,
+			})
+		}
+	}
+
+	return spec
+}
+
+// reconcileEC2NodeClassRelease adds the image and user data resolved by the ignition pipeline to the desired spec.
+// Unpinned NodeClasses keep their current values while the control plane upgrades.
+func reconcileEC2NodeClassRelease(ctx context.Context, desired *awskarpenterv1.EC2NodeClassSpec, current awskarpenterv1.EC2NodeClassSpec, nodeClass *openshiftkarpenterv1.OpenshiftEC2NodeClass, hcp *hyperv1beta1.HostedControlPlane, userDataSecret *corev1.Secret) error {
+	desired.UserData = new(string(userDataSecret.Data["value"]))
+	if hypershift.WaitsForControlPlaneUpgrade(hcp, nodeClass.Spec.Version) && current.UserData != nil && len(current.AMISelectorTerms) > 0 {
+		ctrl.LoggerFrom(ctx).V(1).Info("Control plane upgrade in progress, preserving existing user data and AMIs")
+		desired.UserData = current.UserData
+		desired.AMISelectorTerms = current.AMISelectorTerms
+		return nil
+	}
+
+	amiSelectorTerms, err := amiSelectorTermsFromUserDataSecret(userDataSecret)
+	if err != nil {
+		return fmt.Errorf("getting ami selector terms: %w", err)
+	}
+	desired.AMISelectorTerms = amiSelectorTerms
+	return nil
+}
+
+// DefaultSubnetSelectorTags returns the tags selecting the private subnets of the hosted cluster.
+func DefaultSubnetSelectorTags(infraID string) map[string]string {
+	return map[string]string{
+		"kubernetes.io/role/internal-elb":                "1",
+		fmt.Sprintf("kubernetes.io/cluster/%s", infraID): "*",
+	}
+}
+
+// DefaultSecurityGroupSelectorTags returns the tags selecting the default security group of the hosted cluster.
+func DefaultSecurityGroupSelectorTags(infraID string) map[string]string {
+	return map[string]string{
+		"karpenter.sh/discovery": infraID,
+	}
+}
 
 func karpenterBlockDeviceMappingFromNodeClassSpec(spec openshiftkarpenterv1.OpenshiftEC2NodeClassSpec) []*awskarpenterv1.BlockDeviceMapping {
 	if spec.BlockDeviceMappings == nil {

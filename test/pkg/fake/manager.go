@@ -7,15 +7,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 )
 
-// Manager satisfies ctrl.Manager for unit tests that only need GetClient/GetCache.
+// Manager satisfies ctrl.Manager for unit tests that only need clients, an API reader, and a cache.
 type Manager struct {
 	ctrl.Manager
-	Cl client.Client
-	Ca cache.Cache
+	Cl     client.Client
+	Ca     cache.Cache
+	Reader client.Reader
 }
 
 func (f *Manager) GetClient() client.Client { return f.Cl }
 func (f *Manager) GetCache() cache.Cache    { return f.Ca }
+func (f *Manager) GetAPIReader() client.Reader {
+	if f.Reader != nil {
+		return f.Reader
+	}
+	return f.Cl
+}
 
 // Cluster satisfies cluster.Cluster for unit tests that only need GetClient/GetCache.
 type Cluster struct {

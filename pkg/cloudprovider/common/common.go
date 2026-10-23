@@ -53,7 +53,7 @@ type HCPNodeClassProvider interface {
 	// CRDs returns the platform NodeClass CRDs installed into the hosted cluster.
 	CRDs() []*apiextensionsv1.CustomResourceDefinition
 	// NewControllers returns the controllers reconciling platform NodeClasses in the hosted cluster.
-	NewControllers(hostedCluster cluster.Cluster, namespace string) []NodeClassController
+	NewControllers(mgr ctrl.Manager, hostedCluster cluster.Cluster, namespace string) []NodeClassController
 }
 
 // NodeClassController reconciles platform NodeClasses in the hosted cluster.
