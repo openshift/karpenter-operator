@@ -106,7 +106,7 @@ func (c *HCPController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	ref := hcpOwnerRef(hcp)
 
-	if err := applyServiceAccount(ctx, c.client, c.config.Namespace, ref); err != nil {
+	if err := applyServiceAccount(ctx, c.client, c.config.Namespace, ref, hcp.Spec.PullSecret.Name); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling ServiceAccount: %w", err)
 	}
 
@@ -197,6 +197,7 @@ func hcpOperandChanged(oldHCP, newHCP *hyperv1beta1.HostedControlPlane) bool {
 
 	// Check spec changes
 	specChanged := oldHCP.Spec.InfraID != newHCP.Spec.InfraID ||
+		oldHCP.Spec.PullSecret.Name != newHCP.Spec.PullSecret.Name ||
 		!equality.Semantic.DeepEqual(oldHCP.Spec.AutoNode, newHCP.Spec.AutoNode)
 
 	// Check control plane version status changes (specific status field we care about)

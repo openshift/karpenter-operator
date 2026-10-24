@@ -69,7 +69,7 @@ func (c *OCPController) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Res
 	ref := ocpOwnerRef(karp)
 	ns := c.config.Namespace
 
-	if err := applyServiceAccount(ctx, c.client, ns, ref); err != nil {
+	if err := applyServiceAccount(ctx, c.client, ns, ref, ""); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling ServiceAccount: %w", err)
 	}
 

@@ -86,6 +86,7 @@ func hcpWithProvisioner(name hyperv1beta1.Provisioner) *hyperv1beta1.HostedContr
 		},
 		Spec: hyperv1beta1.HostedControlPlaneSpec{
 			ReleaseImage: "release-image",
+			PullSecret:   corev1.LocalObjectReference{Name: "pull-secret"},
 			InfraID:      hcpTestInfraID,
 			AutoNode: hyperv1beta1.AutoNode{
 				Provisioner: hyperv1beta1.ProvisionerConfig{
@@ -128,6 +129,17 @@ func TestHCPOperandReconcilePredicate(t *testing.T) {
 				ObjectNew: func() *hyperv1beta1.HostedControlPlane {
 					updated := hcp.DeepCopy()
 					updated.Spec.InfraID = "new-infra-id"
+					return updated
+				}(),
+			},
+			expect: true,
+		},
+		"When the pull secret reference changes, it should reconcile": {
+			event: event.UpdateEvent{
+				ObjectOld: hcp,
+				ObjectNew: func() *hyperv1beta1.HostedControlPlane {
+					updated := hcp.DeepCopy()
+					updated.Spec.PullSecret.Name = "custom-pull-secret"
 					return updated
 				}(),
 			},
@@ -190,6 +202,8 @@ func TestHCPReconcile(t *testing.T) {
 	const overrideImage = "quay.io/macao/karpenter-provider-aws:dev"
 	overrideHCP := hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter)
 	overrideHCP.Annotations = map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: overrideImage}
+	emptyPullSecretHCP := hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter)
+	emptyPullSecretHCP.Spec.PullSecret.Name = ""
 	tests := map[string]struct {
 		objects                     []client.Object
 		configuredImage             *string
@@ -213,11 +227,48 @@ func TestHCPReconcile(t *testing.T) {
 			expectOperands:             true,
 			expectedImageAfterMutation: new(hcpTestKarpenterImage),
 			check: func(g Gomega, dep *appsv1.Deployment, sa *corev1.ServiceAccount) {
+				g.Expect(sa.ImagePullSecrets).To(Equal([]corev1.LocalObjectReference{{Name: "pull-secret"}}))
+				g.Expect(dep.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 				for _, obj := range []client.Object{dep, sa} {
 					g.Expect(obj.GetOwnerReferences()).To(HaveLen(1))
 					g.Expect(obj.GetOwnerReferences()[0].Kind).To(Equal("HostedControlPlane"))
 					g.Expect(obj.GetOwnerReferences()[0].Name).To(Equal(hcpTestHCPName))
 				}
+			},
+		},
+		"When the HCP pull secret is empty, it should omit image pull secrets": {
+			objects:        []client.Object{emptyPullSecretHCP},
+			expectOperands: true,
+			check: func(g Gomega, _ *appsv1.Deployment, sa *corev1.ServiceAccount) {
+				g.Expect(sa.ImagePullSecrets).To(BeEmpty())
+			},
+		},
+		"When the HCP pull secret is cleared, it should preserve existing ServiceAccount credentials": {
+			objects: []client.Object{
+				hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter),
+				&corev1.ServiceAccount{
+					ObjectMeta:       metav1.ObjectMeta{Namespace: hcpTestNamespace, Name: karpenterName},
+					ImagePullSecrets: []corev1.LocalObjectReference{{Name: "registry-credentials"}},
+				},
+			},
+			expectOperands: true,
+			mutate: func(ctx context.Context, cl client.Client) error {
+				return cl.Patch(ctx, hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter),
+					client.RawPatch(types.MergePatchType, []byte(`{"spec":{"pullSecret":{"name":""}}}`)))
+			},
+			check: func(g Gomega, _ *appsv1.Deployment, sa *corev1.ServiceAccount) {
+				g.Expect(sa.ImagePullSecrets).To(ConsistOf(corev1.LocalObjectReference{Name: "registry-credentials"}, corev1.LocalObjectReference{Name: "pull-secret"}))
+			},
+		},
+		"When the pull secret reference changes, it should add it to the ServiceAccount": {
+			objects:        []client.Object{hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter)},
+			expectOperands: true,
+			mutate: func(ctx context.Context, cl client.Client) error {
+				return cl.Patch(ctx, hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter),
+					client.RawPatch(types.MergePatchType, []byte(`{"spec":{"pullSecret":{"name":"custom-pull-secret"}}}`)))
+			},
+			check: func(g Gomega, _ *appsv1.Deployment, sa *corev1.ServiceAccount) {
+				g.Expect(sa.ImagePullSecrets).To(ConsistOf(corev1.LocalObjectReference{Name: "pull-secret"}, corev1.LocalObjectReference{Name: "custom-pull-secret"}))
 			},
 		},
 		"When the karpenter Deployment is mutated, it should restore the desired spec": {
@@ -261,9 +312,12 @@ func TestHCPReconcile(t *testing.T) {
 					return err
 				}
 				sa.OwnerReferences = nil
+				sa.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "registry-credentials"}, {Name: "pull-secret"}}
 				return cl.Update(ctx, sa)
 			},
-			check: func(g Gomega, _ *appsv1.Deployment, sa *corev1.ServiceAccount) {
+			check: func(g Gomega, dep *appsv1.Deployment, sa *corev1.ServiceAccount) {
+				g.Expect(sa.ImagePullSecrets).To(ConsistOf(corev1.LocalObjectReference{Name: "registry-credentials"}, corev1.LocalObjectReference{Name: "pull-secret"}))
+				g.Expect(dep.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 				g.Expect(sa.OwnerReferences).To(HaveLen(1))
 				g.Expect(sa.OwnerReferences[0].Kind).To(Equal("HostedControlPlane"))
 				g.Expect(sa.OwnerReferences[0].Name).To(Equal(hcpTestHCPName))

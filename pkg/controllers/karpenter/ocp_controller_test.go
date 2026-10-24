@@ -211,6 +211,7 @@ func TestOCPReconcile(t *testing.T) {
 			g.Expect(controller.client.Get(ctx, client.ObjectKey{
 				Namespace: ocpTestNamespace, Name: "karpenter",
 			}, sa)).To(Succeed())
+			g.Expect(sa.ImagePullSecrets).To(BeEmpty())
 			g.Expect(sa.OwnerReferences).To(HaveLen(1))
 			g.Expect(sa.OwnerReferences[0].Kind).To(Equal("Karpenter"))
 			g.Expect(sa.OwnerReferences[0].Name).To(Equal(autoscalingv1alpha1.SingletonName))
