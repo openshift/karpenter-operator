@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
+	"github.com/openshift/karpenter-operator/pkg/cloudprovider/azure"
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 	testfake "github.com/openshift/karpenter-operator/test/pkg/fake"
 	"github.com/openshift/karpenter-operator/test/pkg/testutil"
@@ -198,6 +199,8 @@ func updateHCPAnnotations(annotations map[string]string) func(context.Context, c
 	}
 }
 
+// TestHCPReconcile tests reconciliation behavior, including restoring mutated
+// or deleted resources. Manifest snapshots are covered by TestReconcileDeployment.
 func TestHCPReconcile(t *testing.T) {
 	const overrideImage = "quay.io/macao/karpenter-provider-aws:dev"
 	overrideHCP := hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter)
@@ -501,17 +504,73 @@ func TestHCPImageOverrideReconcilePredicate(t *testing.T) {
 	}
 }
 
+// TestReconcileDeployment snapshots the rendered AWS and Azure Deployment SSA
+// payloads and checks repeatability with unchanged inputs. Resource mutation and
+// recovery are covered by TestHCPReconcile.
 func TestReconcileDeployment(t *testing.T) {
+	awsConfig := HCPControllerConfig{
+		Namespace:        "clusters-autonode",
+		KarpenterImage:   "quay.io/openshift/origin-aws-karpenter-provider-aws:latest",
+		ClusterName:      "autonode",
+		ClusterEndpoint:  "https://api.autonode.hypershift.local:6443",
+		TokenMinterImage: "quay.io/openshift/origin-hypershift:latest",
+		CloudProvider: &testfake.CloudProvider{
+			CloudConfig: common.OperandCloudConfig{
+				CredentialsSecretName: "karpenter-credentials",
+				Env: []corev1.EnvVar{
+					{Name: "AWS_REGION", Value: "us-east-1"},
+					{Name: "AWS_SHARED_CREDENTIALS_FILE", Value: "/etc/provider/credentials"},
+					{Name: "AWS_SDK_LOAD_CONFIG", Value: "true"},
+				},
+				Volumes: []corev1.Volume{{
+					Name: "provider-creds",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{SecretName: "karpenter-credentials"},
+					},
+				}},
+				VolumeMounts: []corev1.VolumeMount{{Name: "provider-creds", MountPath: "/etc/provider", ReadOnly: true}},
+			},
+		},
+	}
+	azureConfig := HCPControllerConfig{
+		Namespace:        "clusters-autonode",
+		KarpenterImage:   "quay.io/openshift/origin-azure-karpenter-provider-azure:latest",
+		ClusterName:      "autonode",
+		ClusterEndpoint:  "https://api.autonode.hypershift.local:6443",
+		TokenMinterImage: "quay.io/openshift/origin-hypershift:latest",
+		CloudProvider: &testfake.CloudProvider{
+			CloudConfig: common.OperandCloudConfig{
+				Env: []corev1.EnvVar{
+					{Name: azure.AzureLocationEnvName, Value: "eastus"},
+					{Name: azure.AzureClientIDEnvName, Value: "11111111-1111-1111-1111-111111111111"},
+					{Name: azure.AzureTenantIDEnvName, Value: "22222222-2222-2222-2222-222222222222"},
+					{Name: azure.AzureSubscriptionIDEnvName, Value: "00000000-0000-0000-0000-000000000000"},
+					{Name: azure.AzureFederatedTokenFileEnvName, Value: "/var/run/secrets/openshift/serviceaccount/token"},
+					{Name: azure.AzureVNetSubnetIDEnvName, Value: "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/autonode/providers/Microsoft.Network/virtualNetworks/autonode-vnet/subnets/default"},
+					{Name: azure.AzureNodeResourceGroupEnvName, Value: "autonode-nodes"},
+					{Name: azure.AzureProvisionModeEnvName, Value: "openshift"},
+				},
+			},
+		},
+	}
 	tests := map[string]struct {
+		config HCPControllerConfig
 		mutate func(*hyperv1beta1.HostedControlPlane, *HCPControllerConfig)
 	}{
-		"When an HCP uses Karpenter, it should render the expected deployment": {},
+		"When an HCP uses Karpenter on AWS, it should render the AWS deployment": {
+			config: awsConfig,
+		},
+		"When an HCP uses Karpenter on Azure, it should render the Azure deployment": {
+			config: azureConfig,
+		},
 		"When a non-root UID is supplied, it should render the expected deployment": {
+			config: awsConfig,
 			mutate: func(_ *hyperv1beta1.HostedControlPlane, cfg *HCPControllerConfig) {
 				cfg.DefaultSecurityContextUID = new(int64(1002))
 			},
 		},
 		"When HCP deployment inputs change, it should render the updated deployment": {
+			config: awsConfig,
 			mutate: func(hcp *hyperv1beta1.HostedControlPlane, cfg *HCPControllerConfig) {
 				hcp.Spec.InfraID = "autonode-k8r4p"
 				hcp.Status.ControlPlaneVersion.Desired.Version = "4.21.11"
@@ -520,6 +579,7 @@ func TestReconcileDeployment(t *testing.T) {
 			},
 		},
 		"When an image override is set, it should render the override image": {
+			config: awsConfig,
 			mutate: func(hcp *hyperv1beta1.HostedControlPlane, _ *HCPControllerConfig) {
 				hcp.Annotations = map[string]string{
 					openshiftkarpenterv1.KarpenterImageOverrideAnnotation: "quay.io/macao/karpenter-provider-aws:dev",
@@ -550,32 +610,9 @@ func TestReconcileDeployment(t *testing.T) {
 					},
 				},
 			}
-			cfg := &HCPControllerConfig{
-				Namespace:        hcp.Namespace,
-				KarpenterImage:   "quay.io/openshift/origin-aws-karpenter-provider-aws:latest",
-				ClusterName:      "autonode",
-				ClusterEndpoint:  "https://api.autonode.hypershift.local:6443",
-				TokenMinterImage: "quay.io/openshift/origin-hypershift:latest",
-				CloudProvider: &testfake.CloudProvider{
-					CloudConfig: common.OperandCloudConfig{
-						CredentialsSecretName: "karpenter-credentials",
-						Env: []corev1.EnvVar{
-							{Name: "AWS_REGION", Value: "us-east-1"},
-							{Name: "AWS_SHARED_CREDENTIALS_FILE", Value: "/etc/provider/credentials"},
-							{Name: "AWS_SDK_LOAD_CONFIG", Value: "true"},
-						},
-						Volumes: []corev1.Volume{{
-							Name: "provider-creds",
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{SecretName: "karpenter-credentials"},
-							},
-						}},
-						VolumeMounts: []corev1.VolumeMount{{Name: "provider-creds", MountPath: "/etc/provider", ReadOnly: true}},
-					},
-				},
-			}
+			cfg := tc.config
 			if tc.mutate != nil {
-				tc.mutate(hcp, cfg)
+				tc.mutate(hcp, &cfg)
 			}
 
 			scheme := runtime.NewScheme()
@@ -603,7 +640,7 @@ func TestReconcileDeployment(t *testing.T) {
 					},
 				}).
 				Build()
-			controller := NewHCPController(cl, cfg)
+			controller := NewHCPController(cl, &cfg)
 			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(hcp)}
 
 			// Reconcile twice with unchanged inputs as a regression check for
