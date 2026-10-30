@@ -92,13 +92,14 @@ func (c *OCPController) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Res
 	}
 
 	cfg := &operandConfig{
-		namespace:       c.config.Namespace,
-		karpenterImage:  karpenterImage,
-		clusterName:     c.config.ClusterName,
-		clusterEndpoint: c.config.ClusterEndpoint,
-		cloudProvider:   c.config.CloudProvider,
-		imagePullPolicy: c.imagePullPolicy,
-		logLevelArg:     karp.Spec.LogLevel.Arg(),
+		namespace:         c.config.Namespace,
+		karpenterImage:    karpenterImage,
+		clusterName:       c.config.ClusterName,
+		clusterEndpoint:   c.config.ClusterEndpoint,
+		cloudProvider:     c.config.CloudProvider,
+		imagePullPolicy:   c.imagePullPolicy,
+		logLevelArg:       karp.Spec.LogLevel.Arg(),
+		priorityClassName: karpenterPodPriorityClassName,
 	}
 	if err := applyDeployment(ctx, c.client, cfg, ref); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling Deployment: %w", err)

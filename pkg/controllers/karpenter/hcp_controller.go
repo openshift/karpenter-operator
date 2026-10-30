@@ -119,7 +119,11 @@ func (c *HCPController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		imagePullPolicy:           corev1.PullIfNotPresent,
 		logLevelArg:               "--log-level=debug", // TODO(maxcao13): make this configurable
 		releaseVersion:            hcp.Status.ControlPlaneVersion.Desired.Version,
+		priorityClassName:         hcpKarpenterPodPriorityClassName,
 		defaultSecurityContextUID: c.config.DefaultSecurityContextUID,
+		additionalAnnotations: map[string]string{
+			safeToEvictLocalVolumesAnnotation: cloudTokenVolumeName + "," + tmpVolumeName,
+		},
 		additionalEnv: []corev1.EnvVar{
 			{Name: common.KubeconfigEnvName, Value: targetKubeconfigMountPath + "/" + targetKubeconfigFilePath},
 			{Name: common.DisableLeaderElectionEnvName, Value: "true"},
@@ -245,7 +249,8 @@ func tokenMinterContainer(image string) corev1.Container {
 			"--token-file=" + cloudTokenFilePath,
 			"--kubeconfig=" + targetKubeconfigMountPath + "/" + targetKubeconfigFilePath,
 		},
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy:          corev1.PullIfNotPresent,
+		TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("10m"),

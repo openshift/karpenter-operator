@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: karpenter
+    hypershift.openshift.io/managed-by: karpenter-operator
+  name: karpenter
+  namespace: openshift-karpenter
+  ownerReferences:
+  - apiVersion: autoscaling.openshift.io/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Karpenter
+    name: default
+    uid: test-uid-1234
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: karpenter
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict-local-volumes: tmp
+        openshift.io/required-scc: restricted-v2
+        target.workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
+      labels:
+        app: karpenter
+    spec:
+      containers:
+      - args:
+        - --log-level=info
+        env:
+        - name: SYSTEM_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CLUSTER_NAME
+          value: autonode
+        - name: CLUSTER_ENDPOINT
+          value: https://api.autonode.hypershift.local:6443
+        - name: DISABLE_WEBHOOK
+          value: "true"
+        - name: HEALTH_PROBE_PORT
+          value: "8081"
+        - name: CLOUD_REGION
+          value: us-east-1
+        image: quay.io/openshift/origin-aws-karpenter-provider-aws:latest
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+        name: karpenter
+        ports:
+        - containerPort: 8080
+          name: metrics
+        - containerPort: 8081
+          name: http
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          timeoutSeconds: 30
+        resources:
+          requests:
+            cpu: "1"
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - mountPath: /var/run/secrets/cloud
+          name: cloud-creds
+          readOnly: true
+        - mountPath: /tmp
+          name: tmp
+      priorityClassName: system-node-critical
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: karpenter
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cloud-creds
+        secret:
+          secretName: karpenter-cloud-credentials
+      - emptyDir: {}
+        name: tmp

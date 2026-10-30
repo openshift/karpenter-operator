@@ -23,6 +23,7 @@ spec:
   template:
     metadata:
       annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict-local-volumes: cloud-token,tmp
         openshift.io/required-scc: restricted-v2
         target.workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
       labels:
@@ -84,6 +85,7 @@ spec:
           capabilities:
             drop:
             - ALL
+          readOnlyRootFilesystem: true
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         - mountPath: /etc/provider
@@ -94,6 +96,8 @@ spec:
           readOnly: true
         - mountPath: /var/run/secrets/openshift/serviceaccount
           name: cloud-token
+        - mountPath: /tmp
+          name: tmp
       initContainers:
       - args:
         - --service-account-namespace=kube-system
@@ -119,12 +123,13 @@ spec:
             - /var/run/secrets/openshift/serviceaccount/token
           failureThreshold: 30
           periodSeconds: 1
+        terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         - mountPath: /mnt/kubeconfig
           name: target-kubeconfig
         - mountPath: /var/run/secrets/openshift/serviceaccount
           name: cloud-token
-      priorityClassName: system-node-critical
+      priorityClassName: hypershift-control-plane
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -144,3 +149,5 @@ spec:
           secretName: autonode-k8r4p-kubeconfig
       - emptyDir: {}
         name: cloud-token
+      - emptyDir: {}
+        name: tmp

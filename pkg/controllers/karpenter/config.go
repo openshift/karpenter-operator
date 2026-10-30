@@ -22,8 +22,14 @@ const (
 
 	karpenterPodTerminationGracePeriodSeconds = 10
 	karpenterPodPriorityClassName             = "system-node-critical"
+	hcpKarpenterPodPriorityClassName          = "hypershift-control-plane"
+
+	tmpVolumeName = "tmp"
+	tmpMountPath  = "/tmp"
 
 	appLabelKey = "app"
+
+	safeToEvictLocalVolumesAnnotation = "cluster-autoscaler.kubernetes.io/safe-to-evict-local-volumes"
 
 	targetWorkloadManagementAnnotation = "target.workload.openshift.io/management"
 	targetWorkloadSchedulingPriority   = "{\"effect\": \"PreferredDuringScheduling\"}"
@@ -42,7 +48,9 @@ type operandConfig struct {
 	imagePullPolicy           corev1.PullPolicy
 	logLevelArg               string
 	releaseVersion            string
+	priorityClassName         string
 	defaultSecurityContextUID *int64
+	additionalAnnotations     map[string]string
 	additionalLabels          map[string]string
 	additionalEnv             []corev1.EnvVar
 	additionalVolumeMounts    []corev1.VolumeMount

@@ -4,7 +4,30 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+
+	"github.com/openshift/karpenter-operator/test/pkg/testutil"
+
+	corev1 "k8s.io/api/core/v1"
 )
+
+// TestBuildOCPDeployment snapshots the shared builder's standalone OCP output.
+func TestBuildOCPDeployment(t *testing.T) {
+	t.Run("When configured for standalone OCP, it should render the expected deployment", func(t *testing.T) {
+		g := NewWithT(t)
+		dep, err := buildDeployment(&operandConfig{
+			namespace:         "openshift-karpenter",
+			karpenterImage:    "quay.io/openshift/origin-aws-karpenter-provider-aws:latest",
+			clusterName:       "autonode",
+			clusterEndpoint:   "https://api.autonode.hypershift.local:6443",
+			cloudProvider:     ocpTestCloudProvider,
+			imagePullPolicy:   corev1.PullIfNotPresent,
+			logLevelArg:       "--log-level=info",
+			priorityClassName: karpenterPodPriorityClassName,
+		}, ocpOwnerRef(karpenterCR("info")))
+		g.Expect(err).NotTo(HaveOccurred())
+		testutil.CompareWithFixture(t, dep)
+	})
+}
 
 func TestBuildPodSpecInvalidSecurityContextUID(t *testing.T) {
 	tests := map[string]struct {

@@ -49,9 +49,11 @@ func buildDeployment(cfg *operandConfig, ownerRef *metaac.OwnerReferenceApplyCon
 			WithSelector(karpenterSelector()).
 			WithTemplate(coreac.PodTemplateSpec().
 				WithAnnotations(map[string]string{
+					safeToEvictLocalVolumesAnnotation:  tmpVolumeName,
 					targetWorkloadManagementAnnotation: targetWorkloadSchedulingPriority,
 					"openshift.io/required-scc":        "restricted-v2", // TODO: import key from openshift/api
 				}).
+				WithAnnotations(cfg.additionalAnnotations).
 				WithLabels(podLabels).
 				WithSpec(podSpec),
 			),
@@ -83,6 +85,7 @@ func buildPodSpec(cfg *operandConfig) (*coreac.PodSpecApplyConfiguration, error)
 		return nil, err
 	}
 	mounts := append(cloudMounts, additionalMounts...)
+	mounts = append(mounts, coreac.VolumeMount().WithName(tmpVolumeName).WithMountPath(tmpMountPath))
 
 	cloudVols, err := volumes(cloudCfg.Volumes)
 	if err != nil {
@@ -93,6 +96,7 @@ func buildPodSpec(cfg *operandConfig) (*coreac.PodSpecApplyConfiguration, error)
 		return nil, err
 	}
 	vols := append(cloudVols, additionalVols...)
+	vols = append(vols, coreac.Volume().WithName(tmpVolumeName).WithEmptyDir(coreac.EmptyDirVolumeSource()))
 
 	additionalEnv, err := envVars(cfg.additionalEnv)
 	if err != nil {
@@ -120,7 +124,7 @@ func buildPodSpec(cfg *operandConfig) (*coreac.PodSpecApplyConfiguration, error)
 	}
 
 	return coreac.PodSpec().
-		WithPriorityClassName(karpenterPodPriorityClassName).
+		WithPriorityClassName(cfg.priorityClassName).
 		WithServiceAccountName(karpenterName).
 		WithTerminationGracePeriodSeconds(karpenterPodTerminationGracePeriodSeconds).
 		WithSecurityContext(securityContext).
@@ -141,7 +145,8 @@ func buildPodSpec(cfg *operandConfig) (*coreac.PodSpecApplyConfiguration, error)
 				).
 				WithSecurityContext(coreac.SecurityContext().
 					WithAllowPrivilegeEscalation(false).
-					WithCapabilities(coreac.Capabilities().WithDrop(corev1.Capability("ALL"))),
+					WithCapabilities(coreac.Capabilities().WithDrop(corev1.Capability("ALL"))).
+					WithReadOnlyRootFilesystem(true),
 				).
 				WithTerminationMessagePolicy(corev1.TerminationMessageFallbackToLogsOnError).
 				WithLivenessProbe(karpenterLivenessProbe()).
