@@ -174,14 +174,14 @@ func (c *NodeClassController) reconcileAKSNodeClass(ctx context.Context, nodeCla
 	return aksNodeClass, nil
 }
 
-// marketplaceImageFromUserDataSecret returns the Azure Marketplace image from the labels of the user data Secret.
-// TODO(AUTOSCALE-970): replace with the label keys of the ignition pipeline.
+// marketplaceImageFromUserDataSecret returns the Azure Marketplace image from the annotations of the user data Secret.
+// Only the unsuffixed amd64 keys are read; further image metadata changes are tracked in AUTOSCALE-1084.
 func marketplaceImageFromUserDataSecret(secret *corev1.Secret) *azurekarpenterv1beta1.MarketplaceImage {
 	return &azurekarpenterv1beta1.MarketplaceImage{
-		Publisher: secret.Labels["hypershift.openshift.io/azure-marketplace-publisher"],
-		Offer:     secret.Labels["hypershift.openshift.io/azure-marketplace-offer"],
-		SKU:       secret.Labels["hypershift.openshift.io/azure-marketplace-sku"],
-		Version:   secret.Labels["hypershift.openshift.io/azure-marketplace-version"],
+		Publisher: secret.Annotations["hypershift.openshift.io/azure-marketplace-publisher"],
+		Offer:     secret.Annotations["hypershift.openshift.io/azure-marketplace-offer"],
+		SKU:       secret.Annotations["hypershift.openshift.io/azure-marketplace-sku"],
+		Version:   secret.Annotations["hypershift.openshift.io/azure-marketplace-version"],
 	}
 }
 
