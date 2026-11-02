@@ -177,6 +177,65 @@ tests:
             volumeType: GP3
     expectedError: "snapshotID or volumeSizeGiB must be defined"
 
+  - name: When a blockDeviceMapping has only deviceName, it should fail because ebs is required
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        blockDeviceMappings:
+        - deviceName: /dev/xvda
+    expectedError: "ebs: Required value"
+
+  - name: When a blockDeviceMapping has an empty ebs object, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        blockDeviceMappings:
+        - deviceName: /dev/xvda
+          ebs: {}
+    expectedError: "ebs in body should have at least 1 properties"
+
+  - name: When EBS specifies only volumeSizeGiB, it should pass
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        blockDeviceMappings:
+        - deviceName: /dev/xvda
+          ebs:
+            volumeSizeGiB: 120
+
+  - name: When EBS specifies only snapshotID, it should pass
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        blockDeviceMappings:
+        - deviceName: /dev/xvda
+          ebs:
+            snapshotID: snap-0123456789abcdef0
+
   # --- Version validation ---
   - name: When version is invalid format, it should fail
     initial: |
@@ -246,3 +305,32 @@ tests:
         metadataOptions:
           httpPutResponseHopLimit: 100
     expectedError: "httpPutResponseHopLimit"
+
+  onUpdate:
+  # --- BlockDeviceMappings validation ---
+  - name: When ebs is removed from an existing blockDeviceMapping, it should fail because ebs is required
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        blockDeviceMappings:
+        - deviceName: /dev/xvda
+          ebs:
+            volumeSizeGiB: 120
+    updated: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        blockDeviceMappings:
+        - deviceName: /dev/xvda
+    expectedError: "ebs: Required value"
