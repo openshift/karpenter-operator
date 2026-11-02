@@ -1,0 +1,274 @@
+apiVersion: apiextensions.k8s.io/v1
+name: "OpenShiftAzureNodeClass validation"
+crdName: openshiftazurenodeclasses.karpenter.hypershift.openshift.io
+version: v1alpha1
+tests:
+  onCreate:
+  # --- spec ---
+  - name: When all fields are set to valid values, it should pass
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        vnetSubnetID: /subscriptions/0f5b3c4e-8a7d-4b2e-9c1f-3d6a2e8b7c45/resourceGroups/hcp-prod-eastus-rg/providers/Microsoft.Network/virtualNetworks/hcp-prod-vnet/subnets/workers-subnet
+        osDiskSizeGiB: 128
+        tags:
+          cost-center: "4711"
+          environment: production
+        kubelet:
+          maxPods: 110
+        security:
+          encryption:
+            hostEncryption: Enabled
+        version: 4.22.3
+
+  # spec is optional, but when it is set it must have at least one property.
+  - name: When spec is omitted, it should pass
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+
+  - name: When spec is empty, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec: {}
+    expectedError: "should have at least 1 properties"
+
+  # --- vnetSubnetID validation ---
+  - name: When vnetSubnetID is not a subnet resource ID, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        vnetSubnetID: /subscriptions/0f5b3c4e-8a7d-4b2e-9c1f-3d6a2e8b7c45/resourceGroups/rg
+    expectedError: "vnetSubnetID must be in the format"
+
+  - name: When the subscriptionId is not a UUID, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        vnetSubnetID: /subscriptions/not-a-uuid/resourceGroups/hcp-prod-eastus-rg/providers/Microsoft.Network/virtualNetworks/hcp-prod-vnet/subnets/workers-subnet
+    expectedError: "the subscriptionId in the vnetSubnetID must be a valid UUID"
+
+  - name: When the resourceGroupName contains an invalid character, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        vnetSubnetID: /subscriptions/0f5b3c4e-8a7d-4b2e-9c1f-3d6a2e8b7c45/resourceGroups/hcp#rg/providers/Microsoft.Network/virtualNetworks/hcp-prod-vnet/subnets/workers-subnet
+    expectedError: "the resourceGroupName in the vnetSubnetID must be between 1 and 90 characters"
+
+  - name: When the resourceGroupName ends with a period, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        vnetSubnetID: /subscriptions/0f5b3c4e-8a7d-4b2e-9c1f-3d6a2e8b7c45/resourceGroups/hcp-rg./providers/Microsoft.Network/virtualNetworks/hcp-prod-vnet/subnets/workers-subnet
+    expectedError: "the resourceGroupName in the vnetSubnetID must not end with a period"
+
+  - name: When the vnetName contains an invalid character, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        vnetSubnetID: /subscriptions/0f5b3c4e-8a7d-4b2e-9c1f-3d6a2e8b7c45/resourceGroups/hcp-prod-eastus-rg/providers/Microsoft.Network/virtualNetworks/hcp@vnet/subnets/workers-subnet
+    expectedError: "the vnetName in the vnetSubnetID must be between 2 and 64 characters"
+
+  - name: When the vnetName ends with a hyphen, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        vnetSubnetID: /subscriptions/0f5b3c4e-8a7d-4b2e-9c1f-3d6a2e8b7c45/resourceGroups/hcp-prod-eastus-rg/providers/Microsoft.Network/virtualNetworks/hcp-vnet-/subnets/workers-subnet
+    expectedError: "the vnetName in the vnetSubnetID must not end with either a period (.) or hyphen (-)"
+
+  - name: When the subnetName starts with a non-alphanumeric character, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        vnetSubnetID: /subscriptions/0f5b3c4e-8a7d-4b2e-9c1f-3d6a2e8b7c45/resourceGroups/hcp-prod-eastus-rg/providers/Microsoft.Network/virtualNetworks/hcp-prod-vnet/subnets/_workers
+    expectedError: "the subnetName in the vnetSubnetID must be between 1 and 80 characters"
+
+  - name: When the subnetName ends with a period, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        vnetSubnetID: /subscriptions/0f5b3c4e-8a7d-4b2e-9c1f-3d6a2e8b7c45/resourceGroups/hcp-prod-eastus-rg/providers/Microsoft.Network/virtualNetworks/hcp-prod-vnet/subnets/workers.
+    expectedError: "the subnetName in the vnetSubnetID must not end with a period (.) or hyphen (-)"
+
+  # --- osDiskSizeGiB validation ---
+  - name: When osDiskSizeGiB is below 30, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        osDiskSizeGiB: 29
+    expectedError: "should be greater than or equal to 30"
+
+  - name: When osDiskSizeGiB is above 2048, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        osDiskSizeGiB: 2049
+    expectedError: "should be less than or equal to 2048"
+
+  # --- tags validation ---
+  - name: When tags is empty, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        tags: {}
+    expectedError: "should have at least 1 properties"
+
+  - name: When more than 47 tags are set, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        tags:
+          tag-01: value-01
+          tag-02: value-02
+          tag-03: value-03
+          tag-04: value-04
+          tag-05: value-05
+          tag-06: value-06
+          tag-07: value-07
+          tag-08: value-08
+          tag-09: value-09
+          tag-10: value-10
+          tag-11: value-11
+          tag-12: value-12
+          tag-13: value-13
+          tag-14: value-14
+          tag-15: value-15
+          tag-16: value-16
+          tag-17: value-17
+          tag-18: value-18
+          tag-19: value-19
+          tag-20: value-20
+          tag-21: value-21
+          tag-22: value-22
+          tag-23: value-23
+          tag-24: value-24
+          tag-25: value-25
+          tag-26: value-26
+          tag-27: value-27
+          tag-28: value-28
+          tag-29: value-29
+          tag-30: value-30
+          tag-31: value-31
+          tag-32: value-32
+          tag-33: value-33
+          tag-34: value-34
+          tag-35: value-35
+          tag-36: value-36
+          tag-37: value-37
+          tag-38: value-38
+          tag-39: value-39
+          tag-40: value-40
+          tag-41: value-41
+          tag-42: value-42
+          tag-43: value-43
+          tag-44: value-44
+          tag-45: value-45
+          tag-46: value-46
+          tag-47: value-47
+          tag-48: value-48
+    expectedError: "must have at most 47 items"
+
+  - name: When a tag key is longer than 512 characters, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        tags:
+          aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: production
+    expectedError: "tag keys must be between 1 and 512 characters long"
+
+  - name: When a tag key contains a forbidden character, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        tags:
+          "team/owner": platform
+    expectedError: "tag keys must not contain '<', '>', '%', '&', '?' or '/'"
+
+  - name: When a tag key contains a backslash, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        tags:
+          'team\owner': platform
+    expectedError: "tag keys must not contain '\\'"
+
+  - name: When a tag value is longer than 256 characters, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        tags:
+          owner: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    expectedError: "tag values must be at most 256 characters long"
+
+  - name: When a tag key uses a reserved prefix, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        tags:
+          Karpenter.SH_nodepool: default
+    expectedError: "tag keys starting with 'karpenter.sh_' or 'karpenter.azure.com_' are reserved"
+
+  - name: When a tag key is compute.aks.billing, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        tags:
+          compute.aks.billing: linux
+    expectedError: "tag key 'compute.aks.billing' is reserved"
+
+  # --- security validation ---
+  - name: When security is empty, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        security: {}
+    expectedError: "should have at least 1 properties"
+
+  - name: When hostEncryption is not a supported value, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        security:
+          encryption:
+            hostEncryption: enabled
+    expectedError: "Unsupported value: \"enabled\""
+
+  # --- version validation ---
+  - name: When version is not a semantic version, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        version: v4.22.3
+    expectedError: "version must be a valid semantic version"
+
+  # --- kubelet validation ---
+  - name: When kubelet is empty, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1alpha1
+      kind: OpenShiftAzureNodeClass
+      spec:
+        kubelet: {}
+    expectedError: "should have at least 1 properties"

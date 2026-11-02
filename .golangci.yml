@@ -2,6 +2,8 @@ version: "2"
 run:
   modules-download-mode: vendor
   timeout: 5m
+  build-tags:
+    - envtest
 linters:
   enable:
     - asciicheck
