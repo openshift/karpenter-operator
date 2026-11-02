@@ -304,28 +304,30 @@ spec:
                 - message: the subscriptionId in the vnetSubnetID must be a valid
                     UUID. It must be 5 groups of hyphen separated hexadecimal characters
                     in the form 8-4-4-4-12
-                  rule: self.split('/')[2].matches('^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')
+                  rule: size(self.split('/')) != 11 || (self.split('/')[2].matches('^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'))
                 - message: the resourceGroupName in the vnetSubnetID must be between
                     1 and 90 characters, consisting only of alphanumeric characters,
                     hyphens, underscores, periods and parentheses
-                  rule: self.split('/')[4].matches('^[a-zA-Z0-9-_\\(\\)\\.]{1,90}$')
+                  rule: size(self.split('/')) != 11 || (self.split('/')[4].matches('^[a-zA-Z0-9-_\\(\\)\\.]{1,90}$'))
                 - message: the resourceGroupName in the vnetSubnetID must not end
                     with a period (.) character
-                  rule: '!self.split(''/'')[4].endsWith(''.'')'
+                  rule: size(self.split('/')) != 11 || (!self.split('/')[4].endsWith('.'))
                 - message: the vnetName in the vnetSubnetID must be between 2 and
                     64 characters, consisting only of alphanumeric characters, hyphens,
                     underscores and periods
-                  rule: self.split('/')[8].matches('^[a-zA-Z0-9-_\\.]{2,64}$')
+                  rule: size(self.split('/')) != 11 || (self.split('/')[8].matches('^[a-zA-Z0-9-_\\.]{2,64}$'))
                 - message: the vnetName in the vnetSubnetID must not end with either
                     a period (.) or hyphen (-) character
-                  rule: '!self.split(''/'')[8].endsWith(''.'') && !self.split(''/'')[8].endsWith(''-'')'
+                  rule: size(self.split('/')) != 11 || (!self.split('/')[8].endsWith('.')
+                    && !self.split('/')[8].endsWith('-'))
                 - message: the subnetName in the vnetSubnetID must be between 1 and
                     80 characters, consisting only of alphanumeric characters, hyphens,
                     underscores and periods and must start with an alphanumeric character
-                  rule: self.split('/')[10].matches('^[a-zA-Z0-9][a-zA-Z0-9-_\\.]{0,79}$')
+                  rule: size(self.split('/')) != 11 || (self.split('/')[10].matches('^[a-zA-Z0-9][a-zA-Z0-9-_\\.]{0,79}$'))
                 - message: the subnetName in the vnetSubnetID must not end with a
                     period (.) or hyphen (-) character
-                  rule: '!self.split(''/'')[10].endsWith(''.'') && !self.split(''/'')[10].endsWith(''-'')'
+                  rule: size(self.split('/')) != 11 || (!self.split('/')[10].endsWith('.')
+                    && !self.split('/')[10].endsWith('-'))
             type: object
           status:
             description: status defines the observed state of the OpenShiftAzureNodeClass.

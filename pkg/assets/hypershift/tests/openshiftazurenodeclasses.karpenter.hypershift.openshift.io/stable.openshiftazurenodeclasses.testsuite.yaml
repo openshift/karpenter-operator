@@ -36,13 +36,14 @@ tests:
     expectedError: "should have at least 1 properties"
 
   # --- vnetSubnetID validation ---
+  # The expected error substring only matches when the format error is the only error reported.
   - name: When vnetSubnetID is not a subnet resource ID, it should fail
     initial: |
       apiVersion: karpenter.hypershift.openshift.io/v1alpha1
       kind: OpenShiftAzureNodeClass
       spec:
         vnetSubnetID: /subscriptions/0f5b3c4e-8a7d-4b2e-9c1f-3d6a2e8b7c45/resourceGroups/rg
-    expectedError: "vnetSubnetID must be in the format"
+    expectedError: 'is invalid: spec.vnetSubnetID: Invalid value: "/subscriptions/0f5b3c4e-8a7d-4b2e-9c1f-3d6a2e8b7c45/resourceGroups/rg": vnetSubnetID must be in the format'
 
   - name: When the subscriptionId is not a UUID, it should fail
     initial: |
