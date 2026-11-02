@@ -6,6 +6,7 @@ import (
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 	azurenodeclass "github.com/openshift/karpenter-operator/pkg/controllers/nodeclass/azure"
 	nodeclassvap "github.com/openshift/karpenter-operator/pkg/controllers/nodeclass/vap"
+	nodeproviderid "github.com/openshift/karpenter-operator/pkg/controllers/nodeproviderid/azure"
 
 	admissionv1 "k8s.io/api/admissionregistration/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -63,7 +64,7 @@ func (hcpAzureNodeClassProvider) CRDs() []*apiextensionsv1.CustomResourceDefinit
 	return assets.AzureHCPCRDs
 }
 
-// NewControllers returns the controllers that reconcile OpenShiftAzureNodeClass and AKSNodeClass resources.
+// NewControllers returns the Azure HCP NodeClass, admission policy and node provider ID controllers.
 func (hcpAzureNodeClassProvider) NewControllers(mgr ctrl.Manager, hostedCluster cluster.Cluster, namespace string) []common.NodeClassController {
 	return []common.NodeClassController{
 		azurenodeclass.NewNodeClassController(hostedCluster, namespace),
@@ -94,5 +95,6 @@ func (hcpAzureNodeClassProvider) NewControllers(mgr ctrl.Manager, hostedCluster 
 				ValidationActions: []admissionv1.ValidationAction{admissionv1.Deny},
 			},
 		}),
+		nodeproviderid.NewController(mgr, &nodeproviderid.ControllerConfig{HostedCluster: hostedCluster}),
 	}
 }
