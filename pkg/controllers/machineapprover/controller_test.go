@@ -96,6 +96,7 @@ func TestAuthorizeClientCSR(t *testing.T) {
 		authorize               bool
 		wantAuthorize           bool
 		wantErr                 string
+		wantVerifiedNodeName    string
 		wantVerifiedProviderIDs []string
 	}{
 		"When CSR request is invalid, it should return an error": {
@@ -112,10 +113,11 @@ func TestAuthorizeClientCSR(t *testing.T) {
 			wantAuthorize: false,
 		},
 		"When an unbound NodeClaim exists, it should delegate node authorization": {
-			x509csr:                 createCSR("system:node:test1"),
+			x509csr:                 createCSR("system:node:ip-10-0-1-2.workers.example.com"),
 			objects:                 []client.Object{nodeClaim("aws:///instance-1", "")},
 			authorize:               true,
 			wantAuthorize:           true,
+			wantVerifiedNodeName:    "ip-10-0-1-2.workers.example.com",
 			wantVerifiedProviderIDs: []string{"aws:///instance-1"},
 		},
 		"When bound NodeClaims exist, it should exclude them from bootstrap authorization": {
@@ -126,6 +128,7 @@ func TestAuthorizeClientCSR(t *testing.T) {
 			},
 			authorize:               true,
 			wantAuthorize:           true,
+			wantVerifiedNodeName:    "test1",
 			wantVerifiedProviderIDs: []string{"aws:///instance-1"},
 		},
 	}
@@ -158,6 +161,9 @@ func TestAuthorizeClientCSR(t *testing.T) {
 			if len(tc.objects) == 0 && verifier.calls != 0 {
 				t.Errorf("verifier called %d times, want 0", verifier.calls)
 			}
+			if verifier.nodeName != tc.wantVerifiedNodeName {
+				t.Errorf("verifier node name = %q, want %q", verifier.nodeName, tc.wantVerifiedNodeName)
+			}
 			if tc.wantVerifiedProviderIDs != nil && !slices.Equal(verifiedProviderIDs(verifier.nodeClaims), tc.wantVerifiedProviderIDs) {
 				t.Errorf("verifier called with NodeClaims %v, want ProviderIDs %v", verifiedProviderIDs(verifier.nodeClaims), tc.wantVerifiedProviderIDs)
 			}
@@ -167,11 +173,12 @@ func TestAuthorizeClientCSR(t *testing.T) {
 
 func TestAuthorizeServingCSR(t *testing.T) {
 	tests := map[string]struct {
-		username      string
-		objects       []client.Object
-		authorize     bool
-		wantAuthorize bool
-		wantErr       string
+		username             string
+		objects              []client.Object
+		authorize            bool
+		wantAuthorize        bool
+		wantErr              string
+		wantVerifiedNodeName string
 	}{
 		"When CSR username has no node name, it should return an error": {
 			username: "system:node:",
@@ -182,10 +189,11 @@ func TestAuthorizeServingCSR(t *testing.T) {
 			objects:  []client.Object{nodeClaim("aws:///instance-1", "test2")},
 		},
 		"When a matching NodeClaim exists, it should delegate node authorization": {
-			username:      "system:node:test1",
-			objects:       []client.Object{nodeClaim("aws:///instance-1", "test1")},
-			authorize:     true,
-			wantAuthorize: true,
+			username:             "system:node:ip-10-0-1-2.workers.example.com",
+			objects:              []client.Object{nodeClaim("aws:///instance-1", "ip-10-0-1-2.workers.example.com")},
+			authorize:            true,
+			wantAuthorize:        true,
+			wantVerifiedNodeName: "ip-10-0-1-2.workers.example.com",
 		},
 	}
 
@@ -214,10 +222,11 @@ func TestAuthorizeServingCSR(t *testing.T) {
 			if authorized != tc.wantAuthorize {
 				t.Errorf("authorizeServingCSR() = %t, want %t", authorized, tc.wantAuthorize)
 			}
-			if len(tc.objects) == 0 || tc.objects[0].(*karpenterv1.NodeClaim).Status.NodeName != "test1" {
-				if verifier.calls != 0 {
-					t.Errorf("verifier called %d times, want 0", verifier.calls)
-				}
+			if tc.wantVerifiedNodeName == "" && verifier.calls != 0 {
+				t.Errorf("verifier called %d times, want 0", verifier.calls)
+			}
+			if verifier.nodeName != tc.wantVerifiedNodeName {
+				t.Errorf("verifier node name = %q, want %q", verifier.nodeName, tc.wantVerifiedNodeName)
 			}
 		})
 	}
