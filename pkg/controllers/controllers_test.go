@@ -64,6 +64,15 @@ func TestNewControllers(t *testing.T) {
 			managementCluster: true,
 			wantControllers:   []string{"crd", "karpenter"},
 		},
+		"When running in standalone Azure mode, it should not enable hosted controllers": {
+			cloudProvider:   &azure.Provider{},
+			wantControllers: []string{"crd", "karpenter", "clusteroperator"},
+		},
+		"When Azure HCP mode lacks a hosted cluster, it should not enable hosted controllers": {
+			cloudProvider:     &azure.Provider{},
+			managementCluster: true,
+			wantControllers:   []string{"crd", "karpenter"},
+		},
 		"When running in HCP AWS mode, it should also enable the machine approver and NodeClass controllers": {
 			cloudProvider: &testAWSCloudProvider{CloudProvider: &testfake.CloudProvider{
 				Image:        "test:latest",
@@ -77,7 +86,7 @@ func TestNewControllers(t *testing.T) {
 			cloudProvider:     &azure.Provider{},
 			hostedCluster:     &testfake.Cluster{Cl: fakeclient.NewClientBuilder().Build(), Ca: &testfake.Cache{}},
 			managementCluster: true,
-			wantControllers:   []string{"crd", "default-nodeclass", "azure-nodeclass", "nodeclass-vap", "karpenter", "autonode-status", "hcp-deletion"},
+			wantControllers:   []string{"crd", "default-nodeclass", "azure-nodeclass", "nodeclass-vap", "azure-node-providerid", "karpenter", "autonode-status", "hcp-deletion"},
 		},
 	}
 

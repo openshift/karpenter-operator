@@ -82,7 +82,7 @@ func TestNodeClassVAPController(t *testing.T) {
 	mgr := &testfake.Manager{Cl: fake.NewClientBuilder().WithScheme(scheme).Build()}
 
 	controllers := hcpAzureNodeClassProvider{}.NewControllers(mgr, hostedCluster, "clusters-example")
-	g.Expect(controllers).To(HaveLen(2))
+	g.Expect(controllers).To(HaveLen(3))
 	controller, ok := controllers[1].(*nodeclassvap.Controller)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(controller.Name()).To(Equal("nodeclass-vap"))

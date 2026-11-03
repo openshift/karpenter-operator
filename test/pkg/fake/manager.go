@@ -24,8 +24,9 @@ type Cluster struct {
 	Ca cache.Cache
 }
 
-func (f *Cluster) GetClient() client.Client { return f.Cl }
-func (f *Cluster) GetCache() cache.Cache    { return f.Ca }
+func (f *Cluster) GetClient() client.Client    { return f.Cl }
+func (f *Cluster) GetCache() cache.Cache       { return f.Ca }
+func (f *Cluster) GetAPIReader() client.Reader { return f.Cl }
 
 // Cache satisfies cache.Cache as a non-nil placeholder. Methods panic if called.
 type Cache struct {
