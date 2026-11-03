@@ -148,18 +148,11 @@ func (c *NodeClassController) reconcileAKSNodeClass(ctx context.Context, nodeCla
 	aksNodeClass := &azurekarpenterv1beta1.AKSNodeClass{}
 	aksNodeClass.Name = nodeClass.Name
 	op, err := controllerutil.CreateOrUpdate(ctx, c.hostedClient, aksNodeClass, func() error {
-		current := aksNodeClass.Spec
-		aksNodeClass.Spec = aksNodeClassSpec(nodeClass.Spec)
-		aksNodeClass.Spec.UserData = new(string(userDataSecret.Data["value"]))
-		aksNodeClass.Spec.MarketplaceImage = marketplaceImageFromUserDataSecret(userDataSecret)
-
-		// Unpinned NodeClasses keep their current userData and image while the control plane upgrades.
-		// This also holds back rotated ignition tokens, which is fine: a token is valid for 11h and rotated
-		// after half of that, so a replaced token stays valid for another 5.5h.
-		if hypershift.WaitsForControlPlaneUpgrade(hcp, nodeClass.Spec.Version) && current.UserData != nil && current.MarketplaceImage != nil {
-			aksNodeClass.Spec.UserData = current.UserData
-			aksNodeClass.Spec.MarketplaceImage = current.MarketplaceImage
+		desired := aksNodeClassSpec(nodeClass.Spec)
+		if err := reconcileAKSNodeClassRelease(&desired, aksNodeClass.Spec, nodeClass, hcp, userDataSecret); err != nil {
+			return err
 		}
+		aksNodeClass.Spec = desired
 		return controllerutil.SetControllerReference(nodeClass, aksNodeClass, c.hostedClient.Scheme())
 	})
 	if err != nil {
@@ -172,17 +165,6 @@ func (c *NodeClassController) reconcileAKSNodeClass(ctx context.Context, nodeCla
 		ctrl.LoggerFrom(ctx).Info("Updated AKSNodeClass", "aksnodeclass", aksNodeClass.Name)
 	}
 	return aksNodeClass, nil
-}
-
-// marketplaceImageFromUserDataSecret returns the Azure Marketplace image from the labels of the user data Secret.
-// TODO(AUTOSCALE-970): replace with the label keys of the ignition pipeline.
-func marketplaceImageFromUserDataSecret(secret *corev1.Secret) *azurekarpenterv1beta1.MarketplaceImage {
-	return &azurekarpenterv1beta1.MarketplaceImage{
-		Publisher: secret.Labels["hypershift.openshift.io/azure-marketplace-publisher"],
-		Offer:     secret.Labels["hypershift.openshift.io/azure-marketplace-offer"],
-		SKU:       secret.Labels["hypershift.openshift.io/azure-marketplace-sku"],
-		Version:   secret.Labels["hypershift.openshift.io/azure-marketplace-version"],
-	}
 }
 
 func (c *NodeClassController) reconcileStatus(ctx context.Context, nodeClass *openshiftkarpenterv1alpha1.OpenShiftAzureNodeClass, aksNodeClass *azurekarpenterv1beta1.AKSNodeClass) error {

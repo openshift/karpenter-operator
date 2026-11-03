@@ -8,6 +8,8 @@ import (
 	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
 	openshiftkarpenterv1alpha1 "github.com/openshift/karpenter-operator/api/karpenter/v1alpha1"
 
+	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
+
 	azurekarpenterv1beta1 "github.com/Azure/karpenter-provider-azure/pkg/apis/v1beta1"
 )
 
@@ -83,7 +85,130 @@ func TestAKSNodeClassSpec(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			g := NewWithT(t)
-			g.Expect(aksNodeClassSpec(tc.spec)).To(Equal(tc.want))
+			got := aksNodeClassSpec(tc.spec)
+			g.Expect(got).To(Equal(tc.want))
+		})
+	}
+}
+
+func TestReconcileAKSNodeClassReleaseInvalidMarketplaceAnnotations(t *testing.T) {
+	tests := map[string]struct {
+		annotation string
+		missing    bool
+		wantError  string
+	}{
+		"When the publisher annotation is missing, it should return an error identifying it": {
+			annotation: "hypershift.openshift.io/azure-marketplace-publisher",
+			missing:    true,
+			wantError:  "hypershift.openshift.io/azure-marketplace-publisher",
+		},
+		"When the publisher annotation is empty, it should return an error identifying it": {
+			annotation: "hypershift.openshift.io/azure-marketplace-publisher",
+			wantError:  "hypershift.openshift.io/azure-marketplace-publisher",
+		},
+		"When the offer annotation is missing, it should return an error identifying it": {
+			annotation: "hypershift.openshift.io/azure-marketplace-offer",
+			missing:    true,
+			wantError:  "hypershift.openshift.io/azure-marketplace-offer",
+		},
+		"When the offer annotation is empty, it should return an error identifying it": {
+			annotation: "hypershift.openshift.io/azure-marketplace-offer",
+			wantError:  "hypershift.openshift.io/azure-marketplace-offer",
+		},
+		"When the SKU annotation is missing, it should return an error identifying it": {
+			annotation: "hypershift.openshift.io/azure-marketplace-sku",
+			missing:    true,
+			wantError:  "hypershift.openshift.io/azure-marketplace-sku",
+		},
+		"When the SKU annotation is empty, it should return an error identifying it": {
+			annotation: "hypershift.openshift.io/azure-marketplace-sku",
+			wantError:  "hypershift.openshift.io/azure-marketplace-sku",
+		},
+		"When the version annotation is missing, it should return an error identifying it": {
+			annotation: "hypershift.openshift.io/azure-marketplace-version",
+			missing:    true,
+			wantError:  "hypershift.openshift.io/azure-marketplace-version",
+		},
+		"When the version annotation is empty, it should return an error identifying it": {
+			annotation: "hypershift.openshift.io/azure-marketplace-version",
+			wantError:  "hypershift.openshift.io/azure-marketplace-version",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			g := NewWithT(t)
+			userDataSecret := newUserDataSecret(userData421, marketplaceImage421)
+			if tc.missing {
+				delete(userDataSecret.Annotations, tc.annotation)
+			} else {
+				userDataSecret.Annotations[tc.annotation] = ""
+			}
+
+			desired := azurekarpenterv1beta1.AKSNodeClassSpec{}
+			err := reconcileAKSNodeClassRelease(&desired, azurekarpenterv1beta1.AKSNodeClassSpec{}, newNodeClass(), stableHCP(), userDataSecret)
+			g.Expect(err).To(MatchError(ContainSubstring(tc.wantError)))
+		})
+	}
+}
+
+func TestReconcileAKSNodeClassReleaseUpgradePreservation(t *testing.T) {
+	tests := map[string]struct {
+		current   azurekarpenterv1beta1.AKSNodeClassSpec
+		hcp       *hyperv1beta1.HostedControlPlane
+		version   string
+		wantError bool
+	}{
+		"When an unpinned NodeClass is waiting for an upgrade, it should preserve its release without validating unused image annotations": {
+			current:   newAKSNodeClass(userData421, marketplaceImage421).Spec,
+			hcp:       upgradingHCP(),
+			wantError: false,
+		},
+		"When the control plane upgrade has completed, it should reject missing image annotations": {
+			current:   newAKSNodeClass(userData421, marketplaceImage421).Spec,
+			hcp:       upgradedHCP(),
+			wantError: true,
+		},
+		"When the AKSNodeClass is new during an upgrade, it should reject missing image annotations": {
+			hcp:       upgradingHCP(),
+			wantError: true,
+		},
+		"When the NodeClass has a pinned version during an upgrade, it should reject missing image annotations": {
+			current:   newAKSNodeClass(userData421, marketplaceImage421).Spec,
+			hcp:       upgradingHCP(),
+			version:   "4.21.10",
+			wantError: true,
+		},
+		"When the current user data is unset during an upgrade, it should reject missing image annotations": {
+			current:   azurekarpenterv1beta1.AKSNodeClassSpec{MarketplaceImage: marketplaceImage421},
+			hcp:       upgradingHCP(),
+			wantError: true,
+		},
+		"When the current marketplace image is unset during an upgrade, it should reject missing image annotations": {
+			current:   azurekarpenterv1beta1.AKSNodeClassSpec{UserData: new(userData421)},
+			hcp:       upgradingHCP(),
+			wantError: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			g := NewWithT(t)
+			userDataSecret := newUserDataSecret(userData422, marketplaceImage422)
+			delete(userDataSecret.Annotations, "hypershift.openshift.io/azure-marketplace-sku")
+			nodeClass := newNodeClass()
+			nodeClass.Spec.Version = tc.version
+
+			got := aksNodeClassSpec(nodeClass.Spec)
+			err := reconcileAKSNodeClassRelease(&got, tc.current, nodeClass, tc.hcp, userDataSecret)
+			if tc.wantError {
+				g.Expect(err).To(MatchError(ContainSubstring("hypershift.openshift.io/azure-marketplace-sku")))
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(got.UserData).To(Equal(new(userData421)))
+			g.Expect(got.MarketplaceImage).To(Equal(marketplaceImage421))
+			g.Expect(got.OSDiskSizeGB).To(Equal(new(int32(256))))
 		})
 	}
 }

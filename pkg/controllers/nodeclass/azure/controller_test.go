@@ -393,14 +393,14 @@ func newUserDataSecret(userData string, marketplaceImage *azurekarpenterv1beta1.
 			Name:      "user-data-default-karpenter-a1b2c3d4",
 			Namespace: hcpNamespace,
 			Labels: map[string]string{
-				openshiftkarpenterv1.ManagedByKarpenterLabel:          "true",
+				openshiftkarpenterv1.ManagedByKarpenterLabel: "true",
+			},
+			Annotations: map[string]string{
+				openshiftkarpenterv1.TokenSecretNodePoolAnnotation:    hcpNamespace + "/default-karpenter",
 				"hypershift.openshift.io/azure-marketplace-publisher": marketplaceImage.Publisher,
 				"hypershift.openshift.io/azure-marketplace-offer":     marketplaceImage.Offer,
 				"hypershift.openshift.io/azure-marketplace-sku":       marketplaceImage.SKU,
 				"hypershift.openshift.io/azure-marketplace-version":   marketplaceImage.Version,
-			},
-			Annotations: map[string]string{
-				openshiftkarpenterv1.TokenSecretNodePoolAnnotation: hcpNamespace + "/default-karpenter",
 			},
 		},
 		Data: map[string][]byte{"value": []byte(userData)},
