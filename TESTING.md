@@ -5,7 +5,7 @@ See [CONVENTIONS.md](./CONVENTIONS.md#test-conventions) for test naming, table s
 ## Running tests
 
 - Unit tests are required for new logic, bug fixes, and behavior changes.
-  `make test` runs tests under `pkg/`.
+  `make test` runs tests under `pkg/` and the schema test runner in `test/schema/runner/`.
 - Component or integration tests are recommended when changing interactions between packages.
 - End-to-end tests are expected for new features and significant behavior changes.
   `make e2e` requires access to a cluster through `KUBECONFIG`.
@@ -57,7 +57,7 @@ The schema tests apply the generated NodeClass CRDs in [`pkg/assets/hypershift/`
 ```shell
 make test-schema
 make test-schema SCHEMA_TEST_K8S_VERSIONS=1.37.1
-KUBEBUILDER_ASSETS=<dir> go test -tags envtest ./test/schema/...
+KUBEBUILDER_ASSETS=<dir> go test -tags envtest ./test/schema
 ```
 
 - The last command reuses existing binaries.
