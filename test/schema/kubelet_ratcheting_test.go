@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-const kubeletRatchetingSuiteFilename = "stable.openshiftec2nodeclasses.kubelet-ratcheting.testsuite.yaml"
+const kubeletRatchetingSuiteFilename = "openshiftec2nodeclasses.kubelet-ratcheting.testsuite.yaml"
 
 // TestKubeletRatchetingSuiteCoversTypedFields guards the hand-written kubelet ratcheting suite:
 // every typed KubeletConfiguration field must be set in the initial, updated and expected objects,
