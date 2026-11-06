@@ -40,12 +40,12 @@ func LoadTestSuiteSpecs(testsDir, crdDir string) ([]SuiteSpec, error) {
 
 	out := []SuiteSpec{}
 	for _, filename := range suiteFilenames {
-		suite, err := loadSuiteFile(filename, crdFiles)
+		suiteSpecs, err := loadSuiteFile(filename, crdFiles)
 		if err != nil {
 			return nil, fmt.Errorf("could not set up test suite: %w", err)
 		}
 
-		out = append(out, suite)
+		out = append(out, suiteSpecs...)
 	}
 
 	return out, nil
@@ -94,17 +94,54 @@ func loadCRDFiles(dir string) ([]crdFile, error) {
 	return out, nil
 }
 
-// loadSuiteFile loads and validates an individual SuiteSpec from the given file name.
-func loadSuiteFile(path string, crdFiles []crdFile) (SuiteSpec, error) {
+// loadSuiteFile loads and validates the SuiteSpecs of the given file name.
+// A suite with targets yields one SuiteSpec per target, a suite without targets yields one.
+func loadSuiteFile(path string, crdFiles []crdFile) ([]SuiteSpec, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return SuiteSpec{}, fmt.Errorf("could not read file %q: %w", path, err)
+		return nil, fmt.Errorf("could not read file %q: %w", path, err)
 	}
 
 	s := SuiteSpec{}
 	if err := yaml.UnmarshalStrict(raw, &s); err != nil {
-		return SuiteSpec{}, fmt.Errorf("could not unmarshal YAML file %q: %w", path, err)
+		return nil, fmt.Errorf("could not unmarshal YAML file %q: %w", path, err)
 	}
+
+	if len(s.Targets) == 0 {
+		suite, err := resolveSuite(path, s, nil, crdFiles)
+		if err != nil {
+			return nil, err
+		}
+
+		return []SuiteSpec{suite}, nil
+	}
+
+	if s.CRDName != "" || s.Version != "" {
+		return nil, fmt.Errorf("test suite spec %q is invalid: targets must not be combined with `crdName` or `version`", path)
+	}
+
+	out := []SuiteSpec{}
+	for _, target := range s.Targets {
+		suite := s
+		suite.Targets = nil
+		suite.CRDName = target.CRDName
+		suite.Version = target.Version
+
+		resolved, err := resolveSuite(path, suite, &target, crdFiles)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, resolved)
+	}
+
+	return out, nil
+}
+
+// resolveSuite resolves the CRD under test of the suite and validates it.
+// With a target, the suite documents are adapted to the target CRD first.
+func resolveSuite(path string, s SuiteSpec, target *TargetSpec, crdFiles []crdFile) (SuiteSpec, error) {
+	var err error
 
 	if len(s.CRDName) == 0 {
 		return SuiteSpec{}, fmt.Errorf("test suite spec %q is invalid: missing required field `crdName`", path)
@@ -127,6 +164,12 @@ func loadSuiteFile(path string, crdFiles []crdFile) (SuiteSpec, error) {
 	}
 
 	s.CRD = crdForVersion(matches[0].crd, s.Version)
+
+	if target != nil {
+		if s.Tests, err = adaptTests(s.Tests, s.CRD, s.Version); err != nil {
+			return SuiteSpec{}, fmt.Errorf("could not adapt test suite %q to %q: %w", path, target.CRDName, err)
+		}
+	}
 
 	if err := validateSuiteSpec(s); err != nil {
 		return SuiteSpec{}, fmt.Errorf("test suite spec %q is invalid: %w", path, err)

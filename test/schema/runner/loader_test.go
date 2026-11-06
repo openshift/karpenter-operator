@@ -7,13 +7,16 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+
+	"sigs.k8s.io/yaml"
 )
 
 const (
-	// crdDir holds the NodeClass CRDs.
+	// crdDir holds both NodeClass CRDs.
 	crdDir = "../../../pkg/assets/hypershift"
 
-	ec2CRDName = "openshiftec2nodeclasses.karpenter.hypershift.openshift.io"
+	ec2CRDName   = "openshiftec2nodeclasses.karpenter.hypershift.openshift.io"
+	azureCRDName = "openshiftazurenodeclasses.karpenter.hypershift.openshift.io"
 
 	createSuite = `apiVersion: apiextensions.k8s.io/v1
 name: OpenshiftEC2NodeClass validation
@@ -30,6 +33,22 @@ tests:
         - id: subnet-0123456789abcdef0
         securityGroupSelectorTerms:
         - id: sg-0123456789abcdef0
+`
+
+	genericSuite = `apiVersion: apiextensions.k8s.io/v1
+name: NodeClass kubelet validation
+targets:
+- crdName: openshiftec2nodeclasses.karpenter.hypershift.openshift.io
+  version: v1
+- crdName: openshiftazurenodeclasses.karpenter.hypershift.openshift.io
+  version: v1alpha1
+tests:
+  onCreate:
+  - name: When maxPods is valid, it should pass
+    initial: |
+      spec:
+        kubelet:
+          maxPods: 110
 `
 
 	updateSuite = `apiVersion: apiextensions.k8s.io/v1
@@ -132,6 +151,61 @@ func TestLoadTestSuiteSpecs(t *testing.T) {
 	}
 }
 
+func TestLoadTestSuiteSpecsWithTargets(t *testing.T) {
+	g := NewWithT(t)
+
+	suites, err := LoadTestSuiteSpecs(writeSuite(t, genericSuite), crdDir)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(suites).To(HaveLen(2))
+
+	ec2 := parseDocument(t, suites[0].Tests.OnCreate[0].Initial)
+	g.Expect(suites[0].CRDName).To(Equal(ec2CRDName))
+	g.Expect(ec2).To(HaveKeyWithValue("apiVersion", "karpenter.hypershift.openshift.io/v1"))
+	g.Expect(ec2).To(HaveKeyWithValue("kind", "OpenshiftEC2NodeClass"))
+	g.Expect(ec2["spec"]).To(Equal(map[string]any{"kubelet": map[string]any{"maxPods": float64(110)}}))
+
+	azure := parseDocument(t, suites[1].Tests.OnCreate[0].Initial)
+	g.Expect(suites[1].CRDName).To(Equal(azureCRDName))
+	g.Expect(azure).To(HaveKeyWithValue("apiVersion", "karpenter.hypershift.openshift.io/v1alpha1"))
+	g.Expect(azure).To(HaveKeyWithValue("kind", "OpenShiftAzureNodeClass"))
+	g.Expect(azure["spec"]).To(Equal(map[string]any{"kubelet": map[string]any{"maxPods": float64(110)}}))
+}
+
+func TestLoadTestSuiteSpecsWithTargetsErrors(t *testing.T) {
+	tests := map[string]struct {
+		suite     string
+		wantError string
+	}{
+		"When a suite sets crdName and targets, it should return an error": {
+			suite:     strings.Replace(genericSuite, "targets:", "crdName: "+ec2CRDName+"\ntargets:", 1),
+			wantError: "targets must not be combined with `crdName` or `version`",
+		},
+		"When a target names no CRD, it should return an error": {
+			suite:     strings.Replace(genericSuite, "- crdName: "+azureCRDName, "- crdName: missing.example.com", 1),
+			wantError: `found 0 CRDs named "missing.example.com"`,
+		},
+		"When a generic case sets apiVersion, it should return an error": {
+			suite:     strings.Replace(genericSuite, "      spec:\n        kubelet:\n          maxPods: 110\n", "      apiVersion: karpenter.hypershift.openshift.io/v1\n      spec:\n        kubelet:\n          maxPods: 110\n", 1),
+			wantError: "a generic suite must not set apiVersion",
+		},
+		"When a generic case sets kind, it should return an error": {
+			suite:     strings.Replace(genericSuite, "      spec:\n        kubelet:\n          maxPods: 110\n", "      kind: OpenshiftEC2NodeClass\n      spec:\n        kubelet:\n          maxPods: 110\n", 1),
+			wantError: "a generic suite must not set kind",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			testsDir := writeSuite(t, tc.suite)
+
+			_, err := LoadTestSuiteSpecs(testsDir, crdDir)
+			g.Expect(err).To(MatchError(ContainSubstring(tc.wantError)))
+		})
+	}
+}
+
 // writeSuite writes the suite as tests/<crdName>/fixture.testsuite.yaml, unless it is empty, and returns the tests directory.
 func writeSuite(t *testing.T, suite string) string {
 	t.Helper()
@@ -150,4 +224,16 @@ func writeSuite(t *testing.T, suite string) string {
 	}
 
 	return testsDir
+}
+
+// parseDocument parses a suite document into a map.
+func parseDocument(t *testing.T, raw string) map[string]any {
+	t.Helper()
+
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
+		t.Fatalf("parsing document: %v", err)
+	}
+
+	return doc
 }
