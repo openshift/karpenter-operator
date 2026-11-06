@@ -49,7 +49,7 @@ pkg/assets/              Embedded CRDs and RBAC
 install/                 Operator installation manifests
 hack/                    Generation, verification, and E2E tooling
 test/                    E2E suites and shared helpers
-test/schema/             Envtest runner for NodeClass CRD schema tests
+test/schema/             Envtest NodeClass CRD schema tests; the runner is in test/schema/runner/
 ```
 
 ## Common pitfalls
