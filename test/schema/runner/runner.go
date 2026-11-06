@@ -8,6 +8,7 @@
 //   - `expected` is optional for onCreate cases, and `expectedError` must be a validation error.
 //   - CRD patches are applied with github.com/evanphx/json-patch/v5.
 //   - Each suite continues after a failed case, CRD installation is retried, and CRD removal is awaited.
+//   - A generic suite lists `targets` instead of a crdName and is run once per target CRD.
 package runner
 
 import (

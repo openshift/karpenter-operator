@@ -1,143 +1,76 @@
 apiVersion: apiextensions.k8s.io/v1
-name: "OpenshiftEC2NodeClass kubelet validation"
-crdName: openshiftec2nodeclasses.karpenter.hypershift.openshift.io
-version: v1
+name: "NodeClass kubelet validation"
+targets:
+- crdName: openshiftec2nodeclasses.karpenter.hypershift.openshift.io
+  version: v1
+- crdName: openshiftazurenodeclasses.karpenter.hypershift.openshift.io
+  version: v1alpha1
 tests:
   onCreate:
   # --- maxPods validation ---
   - name: When kubelet maxPods is 0, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           maxPods: 0
     expectedError: "maxPods"
 
   - name: When kubelet maxPods is negative, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           maxPods: -1
     expectedError: "maxPods"
 
   - name: When kubelet maxPods is 1, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           maxPods: 1
 
   - name: When kubelet maxPods is 2500, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           maxPods: 2500
 
   - name: When kubelet maxPods exceeds 2500, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           maxPods: 2501
     expectedError: "maxPods"
 
   - name: When kubelet maxPods is valid, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           maxPods: 110
 
   # --- podsPerCore validation ---
   - name: When kubelet podsPerCore is 0, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           podsPerCore: 0
     expectedError: "podsPerCore"
 
   - name: When kubelet podsPerCore is negative, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           podsPerCore: -1
     expectedError: "podsPerCore"
 
   - name: When kubelet podsPerCore is 1, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           podsPerCore: 1
 
   - name: When kubelet podsPerCore exceeds 2500, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           podsPerCore: 2501
     expectedError: "podsPerCore"
@@ -145,14 +78,7 @@ tests:
   # --- podsPerCore <= maxPods cross-field validation ---
   - name: When kubelet podsPerCore exceeds maxPods, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           maxPods: 10
           podsPerCore: 20
@@ -160,28 +86,14 @@ tests:
 
   - name: When kubelet podsPerCore equals maxPods, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           maxPods: 50
           podsPerCore: 50
 
   - name: When kubelet podsPerCore is less than maxPods, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           maxPods: 110
           podsPerCore: 10
@@ -189,14 +101,7 @@ tests:
   # --- systemReserved validation ---
   - name: When kubelet systemReserved has valid keys, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           systemReserved:
             cpu: "100m"
@@ -206,14 +111,7 @@ tests:
 
   - name: When kubelet systemReserved has invalid key, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           systemReserved:
             gpu: "1"
@@ -221,14 +119,7 @@ tests:
 
   - name: When kubelet systemReserved has invalid key among valid keys, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           systemReserved:
             cpu: "100m"
@@ -238,14 +129,7 @@ tests:
 
   - name: When kubelet systemReserved has one negative value among valid entries, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           systemReserved:
             cpu: "100m"
@@ -254,14 +138,7 @@ tests:
 
   - name: When kubelet systemReserved has an empty value, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           systemReserved:
             cpu: ""
@@ -269,14 +146,7 @@ tests:
 
   - name: When kubelet systemReserved is empty, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           systemReserved: {}
     expectedError: "systemReserved"
@@ -284,14 +154,7 @@ tests:
   # --- kubeReserved validation ---
   - name: When kubelet kubeReserved has valid keys, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           kubeReserved:
             cpu: "200m"
@@ -299,14 +162,7 @@ tests:
 
   - name: When kubelet kubeReserved has invalid key, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           kubeReserved:
             disk: "10Gi"
@@ -314,14 +170,7 @@ tests:
 
   - name: When kubelet kubeReserved has negative value, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           kubeReserved:
             memory: "-512Mi"
@@ -329,14 +178,7 @@ tests:
 
   - name: When kubelet kubeReserved has an empty value, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           kubeReserved:
             memory: ""
@@ -345,14 +187,7 @@ tests:
   # --- evictionHard validation ---
   - name: When kubelet evictionHard has valid keys, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             memory.available: "100Mi"
@@ -360,14 +195,7 @@ tests:
 
   - name: When kubelet evictionHard has invalid key, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             disk.pressure: "10%"
@@ -375,14 +203,7 @@ tests:
 
   - name: When kubelet evictionHard has an empty value, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             memory.available: ""
@@ -391,14 +212,7 @@ tests:
   # --- evictionSoft validation ---
   - name: When kubelet evictionSoft has valid keys, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionSoft:
             memory.available: "200Mi"
@@ -409,14 +223,7 @@ tests:
 
   - name: When kubelet evictionSoft has invalid key, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionSoft:
             cpu.pressure: "50%"
@@ -424,14 +231,7 @@ tests:
 
   - name: When kubelet evictionSoft has an empty value, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionSoft:
             memory.available: ""
@@ -440,14 +240,7 @@ tests:
   # --- evictionSoftGracePeriod validation ---
   - name: When kubelet evictionSoftGracePeriod has valid keys, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionSoft:
             memory.available: "200Mi"
@@ -458,14 +251,7 @@ tests:
 
   - name: When kubelet evictionSoftGracePeriod has invalid key, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionSoftGracePeriod:
             invalid.signal: "30s"
@@ -474,14 +260,7 @@ tests:
   # --- evictionSoft / evictionSoftGracePeriod cross-validation ---
   - name: When kubelet evictionSoft is set without evictionSoftGracePeriod, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionSoft:
             memory.available: "200Mi"
@@ -489,14 +268,7 @@ tests:
 
   - name: When kubelet evictionSoftGracePeriod is set without evictionSoft, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionSoftGracePeriod:
             memory.available: "30s"
@@ -504,14 +276,7 @@ tests:
 
   - name: When kubelet evictionSoft and evictionSoftGracePeriod keys match, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionSoft:
             memory.available: "200Mi"
@@ -522,14 +287,7 @@ tests:
 
   - name: When kubelet evictionSoft has a key not in evictionSoftGracePeriod, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionSoft:
             memory.available: "200Mi"
@@ -540,14 +298,7 @@ tests:
 
   - name: When kubelet evictionHard and evictionSoft share the same signal, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             memory.available: "100Mi"
@@ -559,14 +310,7 @@ tests:
   # --- evictionSoft >= evictionHard threshold ordering validation ---
   - name: When kubelet evictionSoft quantity threshold is less than evictionHard, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             memory.available: "200Mi"
@@ -578,14 +322,7 @@ tests:
 
   - name: When kubelet evictionSoft percentage threshold is less than evictionHard, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             nodefs.available: "15%"
@@ -597,14 +334,7 @@ tests:
 
   - name: When kubelet evictionSoft quantity threshold equals evictionHard, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             memory.available: "100Mi"
@@ -615,14 +345,7 @@ tests:
 
   - name: When kubelet evictionSoft quantity threshold is greater than evictionHard, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             memory.available: "100Mi"
@@ -633,14 +356,7 @@ tests:
 
   - name: When kubelet evictionSoft percentage threshold equals evictionHard, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             nodefs.available: "10%"
@@ -651,14 +367,7 @@ tests:
 
   - name: When kubelet evictionSoft percentage threshold is greater than evictionHard, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             nodefs.available: "10%"
@@ -669,14 +378,7 @@ tests:
 
   - name: When kubelet evictionSoft and evictionHard have multiple signals with one soft less than hard, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             memory.available: "100Mi"
@@ -691,14 +393,7 @@ tests:
 
   - name: When kubelet evictionHard has signals not in evictionSoft, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             memory.available: "100Mi"
@@ -710,14 +405,7 @@ tests:
 
   - name: When only evictionHard is set without evictionSoft, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           evictionHard:
             memory.available: "100Mi"
@@ -725,42 +413,21 @@ tests:
   # --- imageGC threshold validation ---
   - name: When kubelet imageGCHighThresholdPercent exceeds 100, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           imageGCHighThresholdPercent: 101
     expectedError: "imageGCHighThresholdPercent"
 
   - name: When kubelet imageGCLowThresholdPercent is negative, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           imageGCLowThresholdPercent: -1
     expectedError: "imageGCLowThresholdPercent"
 
   - name: When kubelet imageGCHighThresholdPercent is less than imageGCLowThresholdPercent, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           imageGCHighThresholdPercent: 50
           imageGCLowThresholdPercent: 80
@@ -768,14 +435,7 @@ tests:
 
   - name: When kubelet imageGCHighThresholdPercent equals imageGCLowThresholdPercent, it should fail
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           imageGCHighThresholdPercent: 80
           imageGCLowThresholdPercent: 80
@@ -783,14 +443,7 @@ tests:
 
   - name: When kubelet imageGC thresholds are valid, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           imageGCHighThresholdPercent: 85
           imageGCLowThresholdPercent: 80
@@ -798,14 +451,7 @@ tests:
   # --- Comprehensive valid kubelet config ---
   - name: When kubelet has all valid fields set, it should pass
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           maxPods: 110
           podsPerCore: 10
@@ -830,27 +476,13 @@ tests:
   # --- Overflow fields (PreserveUnknownFields) ---
   - name: When kubelet has unknown fields, it should preserve them
     initial: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           maxPods: 110
           podPidsLimit: 4096
           containerLogMaxSize: "50Mi"
     expected: |
-      apiVersion: karpenter.hypershift.openshift.io/v1
-      kind: OpenshiftEC2NodeClass
       spec:
-        subnetSelectorTerms:
-        - tags:
-            env: test
-        securityGroupSelectorTerms:
-        - id: sg-0123456789abcdef0
         kubelet:
           maxPods: 110
           podPidsLimit: 4096

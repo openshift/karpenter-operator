@@ -63,13 +63,18 @@ KUBEBUILDER_ASSETS=<dir> go test -tags envtest ./test/schema
 - The last command reuses existing binaries.
 - The `envtest` build tag keeps plain `go test ./...` from running the suite.
 
-Suites live in `pkg/assets/hypershift/tests/<crdName>/*.testsuite.yaml`.
+Suites are `*.testsuite.yaml` files in `pkg/assets/hypershift/tests/`, per-CRD ones in a `<crdName>/` folder.
 The format follows the [openshift/api tests](https://github.com/openshift/api/tree/master/tests), with these differences:
 
 - `expected` is optional for passing `onCreate` cases.
 - Each `onUpdate` case needs exactly one of `expected`, `expectedError`, or `expectedStatusError`.
 - Unknown suite fields fail loading.
 - A rejection must be an API validation error (`IsInvalid`).
+- A generic suite lists `targets` instead of `crdName` and `version` and runs once per target CRD.
+  Documents omit `apiVersion` and `kind`, which are set per target.
+
+The kubelet suite is generic.
+Keep cases in per-CRD suites when they depend on an omitted or empty `spec`, differ between the CRDs, or patch a field that not every target has.
 
 Name cases as described in [CONVENTIONS.md](./CONVENTIONS.md#test-conventions).
 Write one failing case per validation rule and one passing case per area.
