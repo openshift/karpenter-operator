@@ -40,12 +40,14 @@ YQ_VERSION            ?= v4.53.6
 GOLANGCI_LINT_VERSION ?= v2.13.2
 HELM_VERSION          ?= v4.3.0
 CONTROLLER_GEN_VERSION ?= v0.22.0
+SETUP_ENVTEST_VERSION ?= v0.25.2
 
 ## Tool Binaries
 YQ ?= $(LOCALBIN)/yq-$(YQ_VERSION)
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 HELM ?= $(LOCALBIN)/helm-$(HELM_VERSION)
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen-$(CONTROLLER_GEN_VERSION)
+SETUP_ENVTEST ?= $(LOCALBIN)/setup-envtest-$(SETUP_ENVTEST_VERSION)
 
 ##@ Tools
 
@@ -85,9 +87,20 @@ controller-gen: $(CONTROLLER_GEN) ## Install controller-gen locally if necessary
 $(CONTROLLER_GEN): | $(LOCALBIN)
 	@$(call install-tool,controller-gen,$(CONTROLLER_GEN),GOBIN="$(LOCALBIN)" GOFLAGS= go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION))
 
+.PHONY: setup-envtest
+setup-envtest: $(SETUP_ENVTEST) ## Install setup-envtest locally if necessary.
+	@$(call link-tool,setup-envtest,$(SETUP_ENVTEST))
+$(SETUP_ENVTEST): | $(LOCALBIN)
+	@$(call install-tool,setup-envtest,$(SETUP_ENVTEST),GOBIN="$(LOCALBIN)" GOFLAGS= go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(SETUP_ENVTEST_VERSION))
+
 ##@ Development
 
 JUNIT_REPORT := $(if $(ARTIFACT_DIR),--ginkgo.junit-report="$(ARTIFACT_DIR)/junit_e2e.xml")
+
+ENVTEST_OCP_INDEX ?= https://raw.githubusercontent.com/openshift/api/master/envtest-releases.yaml
+# 1.35 is OCP 4.22, the oldest release supported by this operator. Versions come from the OpenShift envtest index.
+SCHEMA_TEST_K8S_VERSIONS ?= 1.35.1 1.36.2 1.37.1
+ENVTEST_ASSETS_DIR ?= $(LOCALBIN)/envtest
 
 .PHONY: update
 update: fmt generate manifests lint-fix manifest-diff-sync
@@ -140,6 +153,19 @@ verify-git-clean: deps api-deps
 .PHONY: test
 test: ## Run unit tests.
 	go test ./pkg/... -count=1
+
+.PHONY: test-schema
+test-schema: $(SETUP_ENVTEST) ## Run NodeClass CRD schema tests against OpenShift kube-apiserver versions.
+	@failed=""; \
+	for version in $(SCHEMA_TEST_K8S_VERSIONS); do \
+		echo "==> Running schema tests against kube-apiserver $$version"; \
+		KUBEBUILDER_ASSETS="$$($(SETUP_ENVTEST) use $$version --index $(ENVTEST_OCP_INDEX) --bin-dir $(ENVTEST_ASSETS_DIR) -p path)" \
+			go test -tags envtest ./test/schema/... -count=1 -timeout 30m -v \
+			$(if $(ARTIFACT_DIR),--ginkgo.junit-report="$(ARTIFACT_DIR)/junit_schema_$$version.xml") \
+			&& echo "==> Schema tests passed against kube-apiserver $$version" \
+			|| { echo "==> Schema tests FAILED against kube-apiserver $$version"; failed="$$failed $$version"; }; \
+	done; \
+	if [ -n "$$failed" ]; then echo "Schema tests failed against kube-apiserver:$$failed"; exit 1; fi
 
 .PHONY: e2e
 e2e: ## Run e2e tests (requires KUBECONFIG).
