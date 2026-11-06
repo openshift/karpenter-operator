@@ -88,6 +88,7 @@ Stop and ask before:
 
 - Changes under `pkg/apis/autoscaling/` require `make generate && make manifests`.
 - Changes to types under `api/karpenter/` require `make generate && make manifests`.
+- Before changing types under `api/karpenter/`, read [api/AGENTS.md](./api/AGENTS.md).
 - Operand branch or manifest changes require `make manifest-diff-sync`; review all changes under `pkg/assets/` and `install/04_rbac.yaml`.
 - Dependency changes under `api/` require dependency commands from that module.
 - Run `make verify` before submitting changes.
