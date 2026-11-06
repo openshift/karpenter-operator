@@ -70,7 +70,7 @@ type OpenShiftAzureNodeClassSpec struct {
 	// +kubebuilder:validation:Type=object
 	// +kubebuilder:validation:MinProperties=1
 	// +optional
-	Kubelet openshiftkarpenterv1.KubeletConfiguration `json:"kubelet,omitempty,omitzero"`
+	Kubelet openshiftkarpenterv1.KubeletConfiguration `json:"kubelet,omitzero"`
 
 	// security configures security settings of the nodes' virtual machines.
 	// When omitted, the platform defaults are used. When set, at least one setting must be set.
@@ -159,7 +159,7 @@ type OpenShiftAzureNodeClass struct {
 
 	// status defines the observed state of the OpenShiftAzureNodeClass.
 	// +optional
-	Status OpenShiftAzureNodeClassStatus `json:"status,omitempty,omitzero"`
+	Status OpenShiftAzureNodeClassStatus `json:"status,omitzero"`
 }
 
 // +kubebuilder:object:root=true
