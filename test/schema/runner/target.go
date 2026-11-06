@@ -57,6 +57,9 @@ func adaptDocument(raw string, crd *apiextensionsv1.CustomResourceDefinition, ve
 	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
 		return "", err
 	}
+	if doc == nil {
+		return "", fmt.Errorf("document is empty")
+	}
 
 	for _, key := range []string{"apiVersion", "kind"} {
 		if _, found := doc[key]; found {
