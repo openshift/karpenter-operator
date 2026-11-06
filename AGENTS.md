@@ -49,6 +49,7 @@ pkg/assets/              Embedded CRDs and RBAC
 install/                 Operator installation manifests
 hack/                    Generation, verification, and E2E tooling
 test/                    E2E suites and shared helpers
+test/schema/             Envtest NodeClass CRD schema tests; the runner is in test/schema/runner/
 ```
 
 ## Common pitfalls
@@ -88,6 +89,7 @@ Stop and ask before:
 
 - Changes under `pkg/apis/autoscaling/` require `make generate && make manifests`.
 - Changes to types under `api/karpenter/` require `make generate && make manifests`.
+- Changing types or validation under `api/karpenter/` requires updating the schema suites under `pkg/assets/hypershift/tests/` (typed kubelet fields: ratcheting suite) and running `make test-schema`.
 - Operand branch or manifest changes require `make manifest-diff-sync`; review all changes under `pkg/assets/` and `install/04_rbac.yaml`.
 - Dependency changes under `api/` require dependency commands from that module.
 - Run `make verify` before submitting changes.
