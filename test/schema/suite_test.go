@@ -4,6 +4,8 @@ package schema
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -43,7 +45,17 @@ func TestSchema(t *testing.T) {
 	suites, err = runner.LoadTestSuiteSpecs(filepath.Join(crdDir, "tests"), crdDir)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	RunSpecs(t, "NodeClass CRD Schema Suite")
+	RunSpecs(t, schemaSuiteName())
+}
+
+// schemaSuiteName names the junit suite after the kube-apiserver the suite ran against.
+func schemaSuiteName() string {
+	version := os.Getenv("SCHEMA_TEST_K8S_VERSION")
+	if version == "" {
+		return "NodeClass CRD schema"
+	}
+
+	return fmt.Sprintf("NodeClass CRD schema (k8s %s)", version)
 }
 
 var _ = BeforeSuite(func() {
