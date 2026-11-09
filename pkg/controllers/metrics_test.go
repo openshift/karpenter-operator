@@ -86,22 +86,24 @@ func TestSetupOperatorInfoMetricErrors(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("POD_NAME", tc.podName)
-			registry := prometheus.NewRegistry()
-			pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: operatorTestPodName, Namespace: operatorTestNamespace}}
-			reader := fake.NewClientBuilder().WithObjects(pod).Build()
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-			if tc.cancelContext {
-				cancel()
-			}
+			synctest.Test(t, func(t *testing.T) {
+				registry := prometheus.NewRegistry()
+				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: operatorTestPodName, Namespace: operatorTestNamespace}}
+				reader := fake.NewClientBuilder().WithObjects(pod).Build()
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				if tc.cancelContext {
+					cancel()
+				}
 
-			err := setupOperatorInfoMetric(ctx, reader, operatorTestNamespace, registry)
-			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
-				t.Fatalf("setupOperatorInfoMetric() error = %v, want %q", err, tc.wantError)
-			}
-			if err := testutil.GatherAndCompare(registry, strings.NewReader("")); err != nil {
-				t.Fatalf("unexpected metrics output:\n%v", err)
-			}
+				err := setupOperatorInfoMetric(ctx, reader, operatorTestNamespace, registry)
+				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+					t.Fatalf("setupOperatorInfoMetric() error = %v, want %q", err, tc.wantError)
+				}
+				if err := testutil.GatherAndCompare(registry, strings.NewReader("")); err != nil {
+					t.Fatalf("unexpected metrics output:\n%v", err)
+				}
+			})
 		})
 	}
 }
