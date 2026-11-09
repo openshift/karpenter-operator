@@ -1,0 +1,237 @@
+apiVersion: apiextensions.k8s.io/v1
+name: "OpenshiftEC2NodeClass kubelet field promotion compatibility"
+crdName: openshiftec2nodeclasses.karpenter.hypershift.openshift.io
+version: v1
+# Overflow kubelet fields are not validated. When one becomes typed, objects that hold a value
+# the typed schema rejects must stay updatable.
+tests:
+  onUpdate:
+  # maxPods is above the typed maximum of 2500 but unchanged by the update.
+  - name: When an invalid overflow value becomes a typed field and is left unchanged on update, it should pass
+    initialCRDPatches:
+      # Remove the typed maxPods schema so maxPods is stored as overflow on create.
+      - op: remove
+        path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/kubelet/properties/maxPods
+      # Drop the kubelet cross-field rules so they do not reference the removed maxPods schema.
+      - op: remove
+        path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/kubelet/x-kubernetes-validations
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 5000
+          podPidsLimit: 4096
+    updated: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 5000
+          podPidsLimit: 8192
+    expected: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 5000
+          podPidsLimit: 8192
+
+  # Changing maxPods is validated against the typed schema.
+  - name: When an invalid overflow value becomes a typed field and is changed on update, it should fail
+    initialCRDPatches:
+      # Remove the typed maxPods schema so maxPods is stored as overflow on create.
+      - op: remove
+        path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/kubelet/properties/maxPods
+      # Drop the kubelet cross-field rules so they do not reference the removed maxPods schema.
+      - op: remove
+        path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/kubelet/x-kubernetes-validations
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 5000
+          podPidsLimit: 4096
+    updated: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 6000
+          podPidsLimit: 4096
+    expectedError: "maxPods"
+
+  # Overflow fields can be added or removed while typed fields stay set, without rejected updates.
+  - name: When overflow fields change while a typed field stays set on update, it should pass
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 110
+          podPidsLimit: 4096
+    updated: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 110
+          containerLogMaxSize: "50Mi"
+    expected: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 110
+          containerLogMaxSize: "50Mi"
+
+  # When a typed field is removed on update it should be accepted regardless of overflow fields remaining.
+  - name: When a typed field is removed and only overflow fields remain on update, it should pass
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 110
+          podPidsLimit: 4096
+    updated: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          podPidsLimit: 4096
+    expected: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          podPidsLimit: 4096
+
+  # When an object with only overflow fields is updated to add typed fields it should pass.
+  - name: When typed fields are added alongside existing overflow fields on update, it should pass
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          podPidsLimit: 4096
+          containerLogMaxSize: "50Mi"
+    updated: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 110
+          podsPerCore: 10
+          podPidsLimit: 4096
+          containerLogMaxSize: "50Mi"
+    expected: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 110
+          podsPerCore: 10
+          podPidsLimit: 4096
+          containerLogMaxSize: "50Mi"
+
+  # CEL cross-field validation must still fire on update even when overflow fields are present.
+  - name: When podsPerCore exceeds maxPods on update, it should fail even with overflow fields present
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 50
+          podsPerCore: 10
+          podPidsLimit: 4096
+    updated: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        subnetSelectorTerms:
+        - tags:
+            env: test
+        securityGroupSelectorTerms:
+        - id: sg-0123456789abcdef0
+        kubelet:
+          maxPods: 10
+          podsPerCore: 50
+          podPidsLimit: 4096
+    expectedError: "podsPerCore must not exceed maxPods"
