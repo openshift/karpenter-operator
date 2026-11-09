@@ -9,7 +9,6 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -72,16 +71,10 @@ func GenerateTestSuite(env *Env, suiteSpec SuiteSpec) {
 	})
 }
 
-// generateSuiteName prepends the specified suite name with the GVR string
-// for the CRD under test.
+// generateSuiteName prepends the specified suite name with the resource and version
+// of the CRD under test.
 func generateSuiteName(suiteSpec SuiteSpec) string {
-	gvr := schema.GroupVersionResource{
-		Group:    suiteSpec.CRD.Spec.Group,
-		Resource: suiteSpec.CRD.Spec.Names.Plural,
-		Version:  suiteSpec.Version,
-	}
-
-	return fmt.Sprintf("[%s] %s", gvr.String(), suiteSpec.Name)
+	return fmt.Sprintf("[%s/%s] %s", suiteSpec.CRD.Spec.Names.Plural, suiteSpec.Version, suiteSpec.Name)
 }
 
 // generateOnCreateTable generates a table of tests from the defined OnCreate tests
