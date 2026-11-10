@@ -38,7 +38,7 @@ type CloudProvider interface {
 	NodeIdentityVerifier() NodeIdentityVerifier
 }
 
-// NodeIdentityVerifier verifies that a node identity belongs to one or more NodeClaims.
+// NodeIdentityVerifier verifies that a node identity from a client CSR belongs to one of the given unregistered NodeClaims.
 type NodeIdentityVerifier interface {
 	Verify(ctx context.Context, nodeName string, nodeClaims []karpenterv1.NodeClaim) (bool, error)
 }

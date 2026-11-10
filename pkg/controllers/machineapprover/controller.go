@@ -22,8 +22,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
@@ -86,7 +88,51 @@ func (r *Controller) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("watching CertificateSigningRequest: %w", err)
 	}
 
+	if err := c.Watch(source.Kind(
+		r.hostedCluster.GetCache(),
+		&karpenterv1.NodeClaim{},
+		handler.TypedEnqueueRequestsFromMapFunc(r.servingCSRsForNodeClaim),
+		nodeClaimRegisteredPredicate(),
+	)); err != nil {
+		return fmt.Errorf("watching NodeClaim: %w", err)
+	}
+
 	return nil
+}
+
+// servingCSRsForNodeClaim maps a NodeClaim to the pending serving CSRs of its node.
+func (r *Controller) servingCSRsForNodeClaim(ctx context.Context, nodeClaim *karpenterv1.NodeClaim) []reconcile.Request {
+	csrs := &certificatesv1.CertificateSigningRequestList{}
+	if err := r.client.List(ctx, csrs); err != nil {
+		ctrl.LoggerFrom(ctx).Error(err, "listing CSRs", "nodeClaim", nodeClaim.Name)
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, csr := range csrs.Items {
+		if csr.Spec.SignerName == certificatesv1.KubeletServingSignerName &&
+			csr.Spec.Username == "system:node:"+nodeClaim.Status.NodeName &&
+			isCertificateRequestPending(&csr) {
+			requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&csr)})
+		}
+	}
+	return requests
+}
+
+func nodeClaimRegisteredPredicate() predicate.TypedPredicate[*karpenterv1.NodeClaim] {
+	return predicate.TypedFuncs[*karpenterv1.NodeClaim]{
+		CreateFunc:  func(event.TypedCreateEvent[*karpenterv1.NodeClaim]) bool { return false },
+		DeleteFunc:  func(event.TypedDeleteEvent[*karpenterv1.NodeClaim]) bool { return false },
+		GenericFunc: func(event.TypedGenericEvent[*karpenterv1.NodeClaim]) bool { return false },
+		UpdateFunc: func(e event.TypedUpdateEvent[*karpenterv1.NodeClaim]) bool {
+			return nodeClaimRegisteredFn(e.ObjectOld, e.ObjectNew)
+		},
+	}
+}
+
+// nodeClaimRegisteredFn reports whether the update registered the NodeClaim, i.e. set its node name.
+func nodeClaimRegisteredFn(oldClaim, newClaim *karpenterv1.NodeClaim) bool {
+	return oldClaim.Status.NodeName == "" && newClaim.Status.NodeName != ""
 }
 
 func csrFilterFn(csr *certificatesv1.CertificateSigningRequest) bool {
@@ -156,6 +202,8 @@ func (r *Controller) authorize(ctx context.Context, csr *certificatesv1.Certific
 	return false, fmt.Errorf("unrecognized signerName %s", csr.Spec.SignerName)
 }
 
+// authorizeClientCSR approves a client CSR if the node identity belongs to an unregistered NodeClaim,
+// as the Node does not exist yet before its client certificate is issued.
 func (r *Controller) authorizeClientCSR(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error) {
 	x509cr, err := parseCSR(csr.Spec.Request)
 	if err != nil {
@@ -183,18 +231,24 @@ func (r *Controller) authorizeClientCSR(ctx context.Context, csr *certificatesv1
 	return r.verifier.Verify(ctx, nodeName, filteredNodeClaims)
 }
 
+// authorizeServingCSR approves a serving CSR if a NodeClaim is registered for the node (its status.nodeName is set).
+// The kubelet may request it before the NodeClaim is registered, so the NodeClaim watch re-enqueues it on registration.
 func (r *Controller) authorizeServingCSR(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error) {
 	nodeName := strings.TrimPrefix(csr.Spec.Username, "system:node:")
 	if len(nodeName) == 0 {
 		return false, fmt.Errorf("csr username does not have a valid node name")
 	}
 
-	nodeClaim, err := findTargetNodeClaim(ctx, r.client, nodeName)
-	if err != nil || nodeClaim == nil {
+	nodeClaims, err := listNodeClaims(ctx, r.client)
+	if err != nil {
 		return false, err
 	}
 
-	return r.verifier.Verify(ctx, nodeName, []karpenterv1.NodeClaim{*nodeClaim})
+	// The node already proved its identity with its client cert, so no cloud verification is needed.
+	// Unregistered is not an error, the CSR could belong to a Hypershift NodePool node.
+	return slices.ContainsFunc(nodeClaims, func(claim karpenterv1.NodeClaim) bool {
+		return claim.Status.NodeName == nodeName
+	}), nil
 }
 
 func (r *Controller) approve(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) error {
@@ -238,19 +292,4 @@ func listNodeClaims(ctx context.Context, client client.Client) ([]karpenterv1.No
 	}
 
 	return nodeClaimList.Items, nil
-}
-
-func findTargetNodeClaim(ctx context.Context, client client.Client, nodeName string) (*karpenterv1.NodeClaim, error) {
-	nodeClaimList, err := listNodeClaims(ctx, client)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, nodeClaim := range nodeClaimList {
-		if nodeClaim.Status.NodeName == nodeName {
-			return &nodeClaim, nil
-		}
-	}
-	// don't return error, this CSR could belong to a Hypershift NodePool node.
-	return nil, nil
 }

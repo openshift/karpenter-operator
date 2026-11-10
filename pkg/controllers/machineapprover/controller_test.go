@@ -111,14 +111,14 @@ func TestAuthorizeClientCSR(t *testing.T) {
 			authorize:     true,
 			wantAuthorize: false,
 		},
-		"When an unbound NodeClaim exists, it should delegate node authorization": {
+		"When an unregistered NodeClaim exists, it should delegate node authorization": {
 			x509csr:                 createCSR("system:node:test1"),
 			objects:                 []client.Object{nodeClaim("aws:///instance-1", "")},
 			authorize:               true,
 			wantAuthorize:           true,
 			wantVerifiedProviderIDs: []string{"aws:///instance-1"},
 		},
-		"When bound NodeClaims exist, it should exclude them from bootstrap authorization": {
+		"When registered NodeClaims exist, it should exclude them from bootstrap authorization": {
 			x509csr: createCSR("system:node:test1"),
 			objects: []client.Object{
 				nodeClaim("aws:///instance-1", ""),
@@ -177,14 +177,26 @@ func TestAuthorizeServingCSR(t *testing.T) {
 			username: "system:node:",
 			wantErr:  "csr username does not have a valid node name",
 		},
-		"When no NodeClaim matches the node name, it should not call the verifier": {
-			username: "system:node:test1",
-			objects:  []client.Object{nodeClaim("aws:///instance-1", "test2")},
-		},
-		"When a matching NodeClaim exists, it should delegate node authorization": {
+		"When no NodeClaims exist, it should not call the verifier": {
 			username:      "system:node:test1",
-			objects:       []client.Object{nodeClaim("aws:///instance-1", "test1")},
 			authorize:     true,
+			wantAuthorize: false,
+		},
+		"When only a NodeClaim registered for another node exists, it should not call the verifier": {
+			username:      "system:node:test1",
+			objects:       []client.Object{nodeClaim("aws:///instance-1", "test2")},
+			authorize:     true,
+			wantAuthorize: false,
+		},
+		"When only an unregistered NodeClaim exists, it should not authorize the CSR": {
+			username:      "system:node:test1",
+			objects:       []client.Object{nodeClaim("aws:///instance-1", "")},
+			authorize:     true,
+			wantAuthorize: false,
+		},
+		"When a NodeClaim registered for the node exists, it should authorize the CSR without calling the verifier": {
+			username:      "system:node:test1",
+			objects:       []client.Object{nodeClaim("aws:///instance-1", "test1"), nodeClaim("aws:///instance-2", "test2")},
 			wantAuthorize: true,
 		},
 	}
@@ -214,10 +226,52 @@ func TestAuthorizeServingCSR(t *testing.T) {
 			if authorized != tc.wantAuthorize {
 				t.Errorf("authorizeServingCSR() = %t, want %t", authorized, tc.wantAuthorize)
 			}
-			if len(tc.objects) == 0 || tc.objects[0].(*karpenterv1.NodeClaim).Status.NodeName != "test1" {
-				if verifier.calls != 0 {
-					t.Errorf("verifier called %d times, want 0", verifier.calls)
-				}
+			if verifier.calls != 0 {
+				t.Errorf("verifier called %d times, want 0", verifier.calls)
+			}
+		})
+	}
+}
+
+func TestServingCSRsForNodeClaim(t *testing.T) {
+	servingCSR := func(name, username string) *certificatesv1.CertificateSigningRequest {
+		return &certificatesv1.CertificateSigningRequest{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec:       certificatesv1.CertificateSigningRequestSpec{Username: username, SignerName: certificatesv1.KubeletServingSignerName},
+		}
+	}
+	approved := servingCSR("approved", "system:node:test1")
+	approved.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{{Type: certificatesv1.CertificateApproved}}
+	clientCSR := servingCSR("client", "system:node:test1")
+	clientCSR.Spec.SignerName = certificatesv1.KubeAPIServerClientKubeletSignerName
+
+	r := &Controller{client: fake.NewClientBuilder().WithScheme(scheme()).WithObjects(
+		servingCSR("pending", "system:node:test1"),
+		servingCSR("other-node", "system:node:test2"),
+		approved,
+		clientCSR,
+	).Build()}
+
+	requests := r.servingCSRsForNodeClaim(t.Context(), nodeClaim("aws:///instance-1", "test1"))
+	if len(requests) != 1 || requests[0].Name != "pending" {
+		t.Fatalf("servingCSRsForNodeClaim() = %v, want only pending", requests)
+	}
+}
+
+func TestNodeClaimRegisteredFn(t *testing.T) {
+	tests := map[string]struct {
+		old, new string
+		want     bool
+	}{
+		"When the node name is set, it should trigger":              {old: "", new: "test1", want: true},
+		"When the node name stays empty, it should not trigger":     {old: "", new: "", want: false},
+		"When the node name was already set, it should not trigger": {old: "test1", new: "test1", want: false},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := nodeClaimRegisteredFn(nodeClaim("aws:///instance-1", tc.old), nodeClaim("aws:///instance-1", tc.new))
+			if got != tc.want {
+				t.Errorf("nodeClaimRegisteredFn() = %t, want %t", got, tc.want)
 			}
 		})
 	}
