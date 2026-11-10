@@ -64,9 +64,12 @@ func New(_ context.Context, infra common.InfrastructureInfo) (*Provider, error) 
 	}, nil
 }
 
-// NodeIdentityVerifier returns nil until Azure node identity verification is supported.
+// NodeIdentityVerifier returns the provider's node identity verifier.
 func (p *Provider) NodeIdentityVerifier() common.NodeIdentityVerifier {
-	return nil
+	return &nodeIdentityVerifier{
+		subscriptionID: p.subscriptionID,
+		resourceGroup:  p.nodeResourceGroup,
+	}
 }
 
 func (p *Provider) HCPNodeClassProvider() common.HCPNodeClassProvider {

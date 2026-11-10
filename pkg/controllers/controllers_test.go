@@ -77,7 +77,7 @@ func TestNewControllers(t *testing.T) {
 			cloudProvider:     &azure.Provider{},
 			hostedCluster:     &testfake.Cluster{Cl: fakeclient.NewClientBuilder().Build(), Ca: &testfake.Cache{}},
 			managementCluster: true,
-			wantControllers:   []string{"crd", "default-nodeclass", "azure-nodeclass", "nodeclass-vap", "karpenter", "autonode-status", "hcp-deletion"},
+			wantControllers:   []string{"crd", "default-nodeclass", "azure-nodeclass", "nodeclass-vap", "karpenter", "autonode-status", "hcp-deletion", "karpenter-machine-approver"},
 		},
 	}
 
