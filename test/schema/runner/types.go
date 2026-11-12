@@ -1,6 +1,4 @@
-//go:build envtest
-
-package schema
+package runner
 
 import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -21,6 +19,11 @@ type SuiteSpec struct {
 	// Version is the version of the CRD under test in this file.
 	// When omitted, the CRD must have a single version, which is used.
 	Version string `json:"version,omitempty"`
+
+	// Targets makes the suite generic. The suite is run once per target, and CRDName and Version
+	// must be omitted. The documents of the cases omit `apiVersion` and `kind`, which are
+	// set per target.
+	Targets []TargetSpec `json:"targets,omitempty"`
 
 	// Tests defines the test cases to run for this test suite.
 	Tests TestSpec `json:"tests"`

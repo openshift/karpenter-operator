@@ -1,6 +1,4 @@
-//go:build envtest
-
-package schema
+package runner
 
 import (
 	"os"
@@ -9,11 +7,16 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+
+	"sigs.k8s.io/yaml"
 )
 
 const (
-	ec2CRDName     = "openshiftec2nodeclasses.karpenter.hypershift.openshift.io"
-	ec2CRDFilename = "karpenter.hypershift.openshift.io_openshiftec2nodeclasses.yaml"
+	// crdDir holds both NodeClass CRDs.
+	crdDir = "../../../pkg/assets/hypershift"
+
+	ec2CRDName   = "openshiftec2nodeclasses.karpenter.hypershift.openshift.io"
+	azureCRDName = "openshiftazurenodeclasses.karpenter.hypershift.openshift.io"
 
 	createSuite = `apiVersion: apiextensions.k8s.io/v1
 name: OpenshiftEC2NodeClass validation
@@ -30,6 +33,22 @@ tests:
         - id: subnet-0123456789abcdef0
         securityGroupSelectorTerms:
         - id: sg-0123456789abcdef0
+`
+
+	genericSuite = `apiVersion: apiextensions.k8s.io/v1
+name: NodeClass kubelet validation
+targets:
+- crdName: openshiftec2nodeclasses.karpenter.hypershift.openshift.io
+  version: v1
+- crdName: openshiftazurenodeclasses.karpenter.hypershift.openshift.io
+  version: v1alpha1
+tests:
+  onCreate:
+  - name: When maxPods is valid, it should pass
+    initial: |
+      spec:
+        kubelet:
+          maxPods: 110
 `
 
 	updateSuite = `apiVersion: apiextensions.k8s.io/v1
@@ -106,8 +125,8 @@ func TestLoadTestSuiteSpecs(t *testing.T) {
 			wantError: `has no version "v2"`,
 		},
 		"When no CRD matches the crdName, it should return an error": {
-			suite:     strings.Replace(createSuite, ec2CRDName, "openshiftazurenodeclasses.karpenter.hypershift.openshift.io", 1),
-			wantError: `found 0 CRDs named "openshiftazurenodeclasses.karpenter.hypershift.openshift.io"`,
+			suite:     strings.Replace(createSuite, ec2CRDName, "missing.example.com", 1),
+			wantError: `found 0 CRDs named "missing.example.com"`,
 		},
 	}
 
@@ -115,7 +134,7 @@ func TestLoadTestSuiteSpecs(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			testsDir, crdDir := writeSuiteFixture(t, tc.suite)
+			testsDir := writeSuite(t, tc.suite)
 
 			suites, err := LoadTestSuiteSpecs(testsDir, crdDir)
 			if tc.wantError != "" {
@@ -132,23 +151,50 @@ func TestLoadTestSuiteSpecs(t *testing.T) {
 	}
 }
 
-func TestGetPatchedCRD(t *testing.T) {
+func TestLoadTestSuiteSpecsWithTargets(t *testing.T) {
+	g := NewWithT(t)
+
+	suites, err := LoadTestSuiteSpecs(writeSuite(t, genericSuite), crdDir)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(suites).To(HaveLen(2))
+
+	ec2 := parseDocument(t, suites[0].Tests.OnCreate[0].Initial)
+	g.Expect(suites[0].CRDName).To(Equal(ec2CRDName))
+	g.Expect(ec2).To(HaveKeyWithValue("apiVersion", "karpenter.hypershift.openshift.io/v1"))
+	g.Expect(ec2).To(HaveKeyWithValue("kind", "OpenshiftEC2NodeClass"))
+	g.Expect(ec2["spec"]).To(Equal(map[string]any{"kubelet": map[string]any{"maxPods": float64(110)}}))
+
+	azure := parseDocument(t, suites[1].Tests.OnCreate[0].Initial)
+	g.Expect(suites[1].CRDName).To(Equal(azureCRDName))
+	g.Expect(azure).To(HaveKeyWithValue("apiVersion", "karpenter.hypershift.openshift.io/v1alpha1"))
+	g.Expect(azure).To(HaveKeyWithValue("kind", "OpenShiftAzureNodeClass"))
+	g.Expect(azure["spec"]).To(Equal(map[string]any{"kubelet": map[string]any{"maxPods": float64(110)}}))
+}
+
+func TestLoadTestSuiteSpecsWithTargetsErrors(t *testing.T) {
 	tests := map[string]struct {
-		patches   []Patch
+		suite     string
 		wantError string
-		wantScope string
 	}{
-		"When a replace patch targets an existing field, it should change the CRD": {
-			patches:   []Patch{{Op: "replace", Path: "/spec/scope", Value: new(any("Namespaced"))}},
-			wantScope: "Namespaced",
+		"When a suite sets crdName and targets, it should return an error": {
+			suite:     strings.Replace(genericSuite, "targets:", "crdName: "+ec2CRDName+"\ntargets:", 1),
+			wantError: "targets must not be combined with `crdName` or `version`",
 		},
-		"When a patch removes a field, it should drop it from the CRD": {
-			patches:   []Patch{{Op: "remove", Path: "/spec/scope"}},
-			wantScope: "",
+		"When a target names no CRD, it should return an error": {
+			suite:     strings.Replace(genericSuite, "- crdName: "+azureCRDName, "- crdName: missing.example.com", 1),
+			wantError: `found 0 CRDs named "missing.example.com"`,
 		},
-		"When a replace patch targets a missing field, it should return an error": {
-			patches:   []Patch{{Op: "replace", Path: "/spec/missing", Value: new(any("x"))}},
-			wantError: "could not apply patch",
+		"When a generic case sets apiVersion, it should return an error": {
+			suite:     strings.Replace(genericSuite, "      spec:\n        kubelet:\n          maxPods: 110\n", "      apiVersion: karpenter.hypershift.openshift.io/v1\n      spec:\n        kubelet:\n          maxPods: 110\n", 1),
+			wantError: "a generic suite must not set apiVersion",
+		},
+		"When a generic case sets kind, it should return an error": {
+			suite:     strings.Replace(genericSuite, "      spec:\n        kubelet:\n          maxPods: 110\n", "      kind: OpenshiftEC2NodeClass\n      spec:\n        kubelet:\n          maxPods: 110\n", 1),
+			wantError: "a generic suite must not set kind",
+		},
+		"When a generic case document is empty, it should return an error": {
+			suite:     strings.Replace(genericSuite, "    initial: |\n      spec:\n        kubelet:\n          maxPods: 110\n", "    initial: \"  \"\n", 1),
+			wantError: "document is empty",
 		},
 	}
 
@@ -156,40 +202,23 @@ func TestGetPatchedCRD(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			_, crdDir := writeSuiteFixture(t, "")
+			testsDir := writeSuite(t, tc.suite)
 
-			crd, err := getPatchedCRD(filepath.Join(crdDir, "crd.yaml"), tc.patches)
-			if tc.wantError != "" {
-				g.Expect(err).To(MatchError(ContainSubstring(tc.wantError)))
-				return
-			}
-
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(string(crd.Spec.Scope)).To(Equal(tc.wantScope))
+			_, err := LoadTestSuiteSpecs(testsDir, crdDir)
+			g.Expect(err).To(MatchError(ContainSubstring(tc.wantError)))
 		})
 	}
 }
 
-// writeSuiteFixture writes a copy of the EC2 NodeClass CRD as crd.yaml and, when suite is not empty,
-// the suite as tests/<crdName>/fixture.testsuite.yaml. It returns the tests directory and the CRD directory.
-func writeSuiteFixture(t *testing.T, suite string) (string, string) {
+// writeSuite writes the suite as tests/<crdName>/fixture.testsuite.yaml, unless it is empty, and returns the tests directory.
+func writeSuite(t *testing.T, suite string) string {
 	t.Helper()
 
-	crdDir := t.TempDir()
-	testsDir := filepath.Join(crdDir, "tests")
+	testsDir := filepath.Join(t.TempDir(), "tests")
 	suiteDir := filepath.Join(testsDir, ec2CRDName)
-
-	crd, err := os.ReadFile(filepath.Join("..", "..", "pkg", "assets", "hypershift", ec2CRDFilename))
-	if err != nil {
-		t.Fatalf("reading EC2 NodeClass CRD: %v", err)
-	}
 
 	if err := os.MkdirAll(suiteDir, 0o750); err != nil {
 		t.Fatalf("creating suite directory: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(crdDir, "crd.yaml"), crd, 0o600); err != nil { //nolint:gosec // the path is inside t.TempDir()
-		t.Fatalf("writing CRD: %v", err)
 	}
 
 	if suite != "" {
@@ -198,5 +227,17 @@ func writeSuiteFixture(t *testing.T, suite string) (string, string) {
 		}
 	}
 
-	return testsDir, crdDir
+	return testsDir
+}
+
+// parseDocument parses a suite document into a map.
+func parseDocument(t *testing.T, raw string) map[string]any {
+	t.Helper()
+
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
+		t.Fatalf("parsing document: %v", err)
+	}
+
+	return doc
 }

@@ -5,7 +5,7 @@ See [CONVENTIONS.md](./CONVENTIONS.md#test-conventions) for test naming, table s
 ## Running tests
 
 - Unit tests are required for new logic, bug fixes, and behavior changes.
-  `make test` runs tests under `pkg/`.
+  `make test` runs tests under `pkg/` and the schema test runner in `test/schema/runner/`.
 - Component or integration tests are recommended when changing interactions between packages.
 - End-to-end tests are expected for new features and significant behavior changes.
   `make e2e` requires access to a cluster through `KUBECONFIG`.
@@ -57,19 +57,24 @@ The schema tests apply the generated NodeClass CRDs in [`pkg/assets/hypershift/`
 ```shell
 make test-schema
 make test-schema SCHEMA_TEST_K8S_VERSIONS=1.37.1
-KUBEBUILDER_ASSETS=<dir> go test -tags envtest ./test/schema/...
+KUBEBUILDER_ASSETS=<dir> go test -tags envtest ./test/schema
 ```
 
 - The last command reuses existing binaries.
 - The `envtest` build tag keeps plain `go test ./...` from running the suite.
 
-Suites live in `pkg/assets/hypershift/tests/<crdName>/*.testsuite.yaml`.
+Suites are `*.testsuite.yaml` files in `pkg/assets/hypershift/tests/`, per-CRD ones in a `<crdName>/` folder.
 The format follows the [openshift/api tests](https://github.com/openshift/api/tree/master/tests), with these differences:
 
 - `expected` is optional for passing `onCreate` cases.
 - Each `onUpdate` case needs exactly one of `expected`, `expectedError`, or `expectedStatusError`.
 - Unknown suite fields fail loading.
 - A rejection must be an API validation error (`IsInvalid`).
+- A generic suite lists `targets` instead of `crdName` and `version` and runs once per target CRD.
+  Documents omit `apiVersion` and `kind`, which are set per target.
+
+The kubelet suite is generic.
+Keep cases in per-CRD suites when they depend on an omitted or empty `spec`, differ between the CRDs, or patch a field that not every target has.
 
 Name cases as described in [CONVENTIONS.md](./CONVENTIONS.md#test-conventions).
 Write one failing case per validation rule and one passing case per area.

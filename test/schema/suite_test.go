@@ -4,6 +4,8 @@ package schema
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -11,10 +13,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/openshift/karpenter-operator/test/schema/runner"
+
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -23,12 +26,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-var cfg *rest.Config
-var k8sClient client.Client
+var env runner.Env
 var testEnv *envtest.Environment
-var testScheme *k8sruntime.Scheme
 var ctx = context.Background()
-var suites []SuiteSpec
+var suites []runner.SuiteSpec
 
 func TestSchema(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -41,10 +42,20 @@ func TestSchema(t *testing.T) {
 	crdDir := filepath.Join(filepath.Dir(thisFile), "..", "..", "pkg", "assets", "hypershift")
 
 	var err error
-	suites, err = LoadTestSuiteSpecs(filepath.Join(crdDir, "tests"), crdDir)
+	suites, err = runner.LoadTestSuiteSpecs(filepath.Join(crdDir, "tests"), crdDir)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	RunSpecs(t, "NodeClass CRD Schema Suite")
+	RunSpecs(t, schemaSuiteName())
+}
+
+// schemaSuiteName names the junit suite after the kube-apiserver the suite ran against.
+func schemaSuiteName() string {
+	version := os.Getenv("SCHEMA_TEST_K8S_VERSION")
+	if version == "" {
+		return "NodeClass CRD schema"
+	}
+
+	return fmt.Sprintf("NodeClass CRD schema (k8s %s)", version)
 }
 
 var _ = BeforeSuite(func() {
@@ -54,20 +65,20 @@ var _ = BeforeSuite(func() {
 	testEnv = &envtest.Environment{}
 
 	var err error
-	cfg, err = testEnv.Start()
+	env.Config, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
-	Expect(cfg).NotTo(BeNil())
+	Expect(env.Config).NotTo(BeNil())
 
 	// The runner reads and updates CRDs through the client in addition to the custom resources under test.
-	testScheme = k8sruntime.NewScheme()
-	Expect(clientgoscheme.AddToScheme(testScheme)).To(Succeed())
-	Expect(apiextensionsv1.AddToScheme(testScheme)).To(Succeed())
+	scheme := k8sruntime.NewScheme()
+	Expect(clientgoscheme.AddToScheme(scheme)).To(Succeed())
+	Expect(apiextensionsv1.AddToScheme(scheme)).To(Succeed())
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: testScheme})
+	env.Client, err = client.New(env.Config, client.Options{Scheme: scheme})
 	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
+	Expect(env.Client).NotTo(BeNil())
 
-	komega.SetClient(k8sClient)
+	komega.SetClient(env.Client)
 	komega.SetContext(ctx)
 })
 
@@ -79,6 +90,6 @@ var _ = AfterSuite(func() {
 
 var _ = Describe("", func() {
 	for _, suite := range suites {
-		GenerateTestSuite(suite)
+		runner.GenerateTestSuite(&env, suite)
 	}
 })
