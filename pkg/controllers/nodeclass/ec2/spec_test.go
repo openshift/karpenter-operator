@@ -98,6 +98,9 @@ func TestEC2NodeClassSpec(t *testing.T) {
 						},
 					},
 				},
+				CPUOptions: openshiftkarpenterv1.CPUOptions{
+					NestedVirtualization: openshiftkarpenterv1.NestedVirtualizationEnabled,
+				},
 				InstanceStorePolicy: openshiftkarpenterv1.InstanceStorePolicyRAID0,
 				Monitoring:          openshiftkarpenterv1.MonitoringStateDetailed,
 				MetadataOptions: openshiftkarpenterv1.MetadataOptions{
@@ -137,6 +140,9 @@ func TestEC2NodeClassSpec(t *testing.T) {
 						},
 					},
 				},
+				CPUOptions: &awskarpenterv1.CPUOptions{
+					NestedVirtualization: new("enabled"),
+				},
 				InstanceStorePolicy: ptr.To(awskarpenterv1.InstanceStorePolicyRAID0),
 				DetailedMonitoring:  new(true),
 				MetadataOptions: &awskarpenterv1.MetadataOptions{
@@ -144,6 +150,43 @@ func TestEC2NodeClassSpec(t *testing.T) {
 					HTTPProtocolIPv6:        new("disabled"),
 					HTTPPutResponseHopLimit: new(int64(1)),
 					HTTPTokens:              new("required"),
+				},
+			},
+		},
+		"When nested virtualization is disabled, it should disable it in the operand": {
+			spec: openshiftkarpenterv1.OpenshiftEC2NodeClassSpec{
+				CPUOptions: openshiftkarpenterv1.CPUOptions{
+					NestedVirtualization: openshiftkarpenterv1.NestedVirtualizationDisabled,
+				},
+			},
+			expectedSpec: awskarpenterv1.EC2NodeClassSpec{
+				SubnetSelectorTerms: []awskarpenterv1.SubnetSelectorTerm{
+					{
+						Tags: map[string]string{
+							"kubernetes.io/role/internal-elb":                    "1",
+							fmt.Sprintf("kubernetes.io/cluster/%s", testInfraID): "*",
+						},
+					},
+				},
+				SecurityGroupSelectorTerms: []awskarpenterv1.SecurityGroupSelectorTerm{
+					{
+						Tags: map[string]string{
+							"karpenter.sh/discovery": testInfraID,
+						},
+					},
+				},
+				BlockDeviceMappings: []*awskarpenterv1.BlockDeviceMapping{
+					{
+						DeviceName: new("/dev/xvda"),
+						EBS: &awskarpenterv1.BlockDevice{
+							VolumeSize: new(resource.MustParse("120Gi")),
+							VolumeType: new("gp3"),
+							Encrypted:  new(true),
+						},
+					},
+				},
+				CPUOptions: &awskarpenterv1.CPUOptions{
+					NestedVirtualization: new("disabled"),
 				},
 			},
 		},
