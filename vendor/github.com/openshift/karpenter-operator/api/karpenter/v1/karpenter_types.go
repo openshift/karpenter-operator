@@ -565,7 +565,7 @@ type CapacityReservation struct {
 	// endTime is the time at which the capacity reservation expires. Once expired, the reserved capacity is released and Karpenter
 	// will no longer be able to launch instances into that reservation.
 	// +optional
-	EndTime metav1.Time `json:"endTime,omitempty,omitzero"`
+	EndTime metav1.Time `json:"endTime,omitzero"`
 	// id is the id for the capacity reservation.
 	// +required
 	// +kubebuilder:validation:MinLength=1
@@ -685,7 +685,7 @@ type OpenshiftEC2NodeClass struct {
 
 	// status defines the observed state of the OpenshiftEC2NodeClass.
 	// +optional
-	Status OpenshiftEC2NodeClassStatus `json:"status,omitempty,omitzero"`
+	Status OpenshiftEC2NodeClassStatus `json:"status,omitzero"`
 }
 
 // +kubebuilder:object:root=true
