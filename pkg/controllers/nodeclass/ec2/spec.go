@@ -39,6 +39,12 @@ func ec2NodeClassSpec(ctx context.Context, nodeClass *openshiftkarpenterv1.Opens
 		Kubelet:                          karpenterKubeletConfigurationFromNodeClassSpec(nodeClass.Spec),
 	}
 
+	if policy := nodeClass.Spec.CPUOptions.NestedVirtualization; policy != "" {
+		spec.CPUOptions = &awskarpenterv1.CPUOptions{
+			NestedVirtualization: new(strings.ToLower(string(policy))),
+		}
+	}
+
 	// The instance profile is platform-controlled through the HostedCluster.
 	if instanceProfile := hcp.Annotations[hyperv1beta1.AWSKarpenterDefaultInstanceProfile]; instanceProfile != "" {
 		spec.InstanceProfile = new(instanceProfile)

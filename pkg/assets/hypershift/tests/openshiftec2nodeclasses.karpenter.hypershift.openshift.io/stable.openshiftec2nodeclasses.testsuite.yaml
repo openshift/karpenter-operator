@@ -306,7 +306,74 @@ tests:
           httpPutResponseHopLimit: 100
     expectedError: "httpPutResponseHopLimit"
 
+  # --- CPUOptions validation ---
+  - name: When nested virtualization is enabled, it should preserve the policy
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        cpuOptions:
+          nestedVirtualization: Enabled
+    expected: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        cpuOptions:
+          nestedVirtualization: Enabled
+
+  - name: When nested virtualization is disabled, it should preserve the policy
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        cpuOptions:
+          nestedVirtualization: Disabled
+    expected: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        cpuOptions:
+          nestedVirtualization: Disabled
+
+  - name: When nested virtualization has an invalid policy, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        cpuOptions:
+          nestedVirtualization: enabled
+    expectedError: "Unsupported value"
+
+  - name: When cpuOptions is empty, it should fail
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        cpuOptions: {}
+    expectedError: "should have at least 1 properties"
+
   onUpdate:
+  # --- CPUOptions validation ---
+  - name: When nested virtualization is changed, it should preserve the updated policy
+    initial: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        cpuOptions:
+          nestedVirtualization: Enabled
+    updated: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        cpuOptions:
+          nestedVirtualization: Disabled
+    expected: |
+      apiVersion: karpenter.hypershift.openshift.io/v1
+      kind: OpenshiftEC2NodeClass
+      spec:
+        cpuOptions:
+          nestedVirtualization: Disabled
+
   # --- BlockDeviceMappings validation ---
   - name: When ebs is removed from an existing blockDeviceMapping, it should fail because ebs is required
     initial: |
