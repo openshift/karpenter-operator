@@ -110,6 +110,9 @@ func (c *HCPController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, fmt.Errorf("reconciling ServiceAccount: %w", err)
 	}
 
+	// TODO(joelsmith): read interruptionQueue from hcp.Spec.AutoNode once
+	// HyperShift adds InterruptionQueueURL to KarpenterAWSConfig.
+
 	cfg := &operandConfig{
 		namespace:                 c.config.Namespace,
 		karpenterImage:            karpenterImage,

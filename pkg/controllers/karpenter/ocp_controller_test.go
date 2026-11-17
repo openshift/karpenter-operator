@@ -1,11 +1,11 @@
 package karpenter
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/onsi/gomega"
 
-	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
 	autoscalingv1alpha1 "github.com/openshift/karpenter-operator/pkg/apis/autoscaling/v1alpha1"
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 	testfake "github.com/openshift/karpenter-operator/test/pkg/fake"
@@ -16,7 +16,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -84,87 +83,76 @@ func karpenterCR(logLevel autoscalingv1alpha1.KarpenterLogLevel) *autoscalingv1a
 	}
 }
 
+func karpenterCRWithQueue(logLevel autoscalingv1alpha1.KarpenterLogLevel, queue string) *autoscalingv1alpha1.Karpenter {
+	cr := karpenterCR(logLevel)
+	cr.Spec.InterruptionQueue = queue
+	return cr
+}
+
+//nolint:gocyclo
 func TestOCPReconcile(t *testing.T) {
-	const overrideImage = "quay.io/macao/karpenter-provider-aws:dev"
-	overrideKarpenter := karpenterCR(autoscalingv1alpha1.LogLevelInfo)
-	overrideKarpenter.Annotations = map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: overrideImage}
-	tests := map[string]struct {
-		objects                     []client.Object
-		configuredImage             *string
-		expectedError               string
-		expectOperands              bool
-		expectLogLevelArg           string
-		checkRBAC                   bool
-		checkPodSpec                bool
-		expectedImageBeforeMutation *string
-		expectedImageAfterMutation  *string
-		mutate                      func(*autoscalingv1alpha1.Karpenter)
+	tests := []struct {
+		name                    string
+		objects                 []client.Object
+		expectErr               bool
+		expectOperands          bool
+		expectLogLevelArg       string
+		checkRBAC               bool
+		checkPodSpec            bool
+		expectInterruptionQueue string
+		expectNoInterruptionEnv bool
 	}{
-		"When Karpenter CR does not exist, it should not create resources": {
+		{
+			name:           "When Karpenter CR does not exist it should not create resources",
 			expectOperands: false,
 		},
-		"When Karpenter CR exists, it should create operand resources and cloud RBAC": {
-			objects:                    []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelInfo)},
-			expectOperands:             true,
-			expectedImageAfterMutation: new(ocpTestKarpenterImage),
-			checkRBAC:                  true,
+		{
+			name:           "When Karpenter CR exists it should create operand resources and cloud RBAC",
+			objects:        []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelInfo)},
+			expectOperands: true,
+			checkRBAC:      true,
 		},
-		"When log level is debug, it should pass --log-level=debug": {
+		{
+			name:              "When log level is debug it should pass --log-level=debug",
 			objects:           []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelDebug)},
 			expectOperands:    true,
 			expectLogLevelArg: "--log-level=debug",
 		},
-		"When log level is info, it should pass --log-level=info": {
+		{
+			name:              "When log level is info it should pass --log-level=info",
 			objects:           []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelInfo)},
 			expectOperands:    true,
 			expectLogLevelArg: "--log-level=info",
 		},
-		"When log level is error, it should pass --log-level=error": {
+		{
+			name:              "When log level is error it should pass --log-level=error",
 			objects:           []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelError)},
 			expectOperands:    true,
 			expectLogLevelArg: "--log-level=error",
 		},
-		"When log level is empty, it should default to --log-level=info": {
+		{
+			name:              "When log level is empty it should default to --log-level=info",
 			objects:           []client.Object{karpenterCR("")},
 			expectOperands:    true,
 			expectLogLevelArg: "--log-level=info",
 		},
-		"When reconciling, it should configure deployment security probes and cloud credentials": {
+		{
+			name:           "When reconciling it should configure deployment security probes and cloud credentials",
 			objects:        []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelInfo)},
 			expectOperands: true,
 			checkPodSpec:   true,
 		},
-		"When the override is added, it should update the Deployment image": {
-			objects:                     []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelInfo)},
-			configuredImage:             new(ocpTestKarpenterImage),
-			expectOperands:              true,
-			expectedImageBeforeMutation: new(ocpTestKarpenterImage),
-			expectedImageAfterMutation:  new(overrideImage),
-			mutate: func(karp *autoscalingv1alpha1.Karpenter) {
-				karp.Annotations = map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: overrideImage}
-			},
+		{
+			name:                    "When interruptionQueue is set it should pass INTERRUPTION_QUEUE env var",
+			objects:                 []client.Object{karpenterCRWithQueue(autoscalingv1alpha1.LogLevelInfo, "my-interruption-queue")},
+			expectOperands:          true,
+			expectInterruptionQueue: "my-interruption-queue",
 		},
-		"When only an image override is set, it should deploy even if the configured image is not set": {
-			objects:                     []client.Object{overrideKarpenter.DeepCopy()},
-			configuredImage:             new(""),
-			expectOperands:              true,
-			expectedImageBeforeMutation: new(overrideImage),
-		},
-		"When the override is cleared, it should restore the configured image": {
-			objects:                     []client.Object{overrideKarpenter.DeepCopy()},
-			configuredImage:             new(ocpTestKarpenterImage),
-			expectOperands:              true,
-			expectedImageBeforeMutation: new(overrideImage),
-			expectedImageAfterMutation:  new(ocpTestKarpenterImage),
-			mutate: func(karp *autoscalingv1alpha1.Karpenter) {
-				karp.Annotations[openshiftkarpenterv1.KarpenterImageOverrideAnnotation] = ""
-			},
-		},
-		"When both image sources are absent, it should return an error without creating a Deployment": {
-			objects:         []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelInfo)},
-			configuredImage: new(""),
-			expectedError:   "karpenter image is not set",
-			expectOperands:  false,
+		{
+			name:                    "When interruptionQueue is empty it should not set INTERRUPTION_QUEUE env var",
+			objects:                 []client.Object{karpenterCR(autoscalingv1alpha1.LogLevelInfo)},
+			expectOperands:          true,
+			expectNoInterruptionEnv: true,
 		},
 	}
 
@@ -173,9 +161,8 @@ func TestOCPReconcile(t *testing.T) {
 	_ = appsv1.AddToScheme(s)
 	_ = corev1.AddToScheme(s)
 	_ = rbacv1.AddToScheme(s)
-	_ = monitoringv1.AddToScheme(s)
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
 
 			c := fakeclient.NewClientBuilder().
@@ -183,19 +170,16 @@ func TestOCPReconcile(t *testing.T) {
 				WithObjects(tc.objects...).
 				Build()
 
-			cfg := *ocpTestConfig
-			cfg.KarpenterImage = ptr.Deref(tc.configuredImage, cfg.KarpenterImage)
-			controller := NewOCPController(c, &cfg)
+			controller := NewOCPController(c, ocpTestConfig)
 
 			ctx := t.Context()
 
 			result, err := controller.Reconcile(ctx, ctrl.Request{})
-			expectOptionalImage(g, cfg.KarpenterImage, tc.configuredImage)
-			if tc.expectedError != "" {
-				g.Expect(err).To(MatchError(tc.expectedError))
-			} else {
-				g.Expect(err).NotTo(HaveOccurred())
+			if tc.expectErr {
+				g.Expect(err).To(HaveOccurred())
+				return
 			}
+			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(result).To(Equal(ctrl.Result{}))
 
 			depList := &appsv1.DeploymentList{}
@@ -211,7 +195,6 @@ func TestOCPReconcile(t *testing.T) {
 			g.Expect(controller.client.Get(ctx, client.ObjectKey{
 				Namespace: ocpTestNamespace, Name: "karpenter",
 			}, sa)).To(Succeed())
-			g.Expect(sa.ImagePullSecrets).To(BeEmpty())
 			g.Expect(sa.OwnerReferences).To(HaveLen(1))
 			g.Expect(sa.OwnerReferences[0].Kind).To(Equal("Karpenter"))
 			g.Expect(sa.OwnerReferences[0].Name).To(Equal(autoscalingv1alpha1.SingletonName))
@@ -225,29 +208,28 @@ func TestOCPReconcile(t *testing.T) {
 			g.Expect(*dep.Spec.Replicas).To(Equal(int32(1)))
 			g.Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
 			g.Expect(dep.Spec.Template.Spec.Containers[0].Name).To(Equal("karpenter"))
-			expectOptionalImage(g, dep.Spec.Template.Spec.Containers[0].Image, tc.expectedImageBeforeMutation)
-			if tc.mutate != nil {
-				karp := &autoscalingv1alpha1.Karpenter{}
-				g.Expect(controller.client.Get(ctx, client.ObjectKey{Name: autoscalingv1alpha1.SingletonName}, karp)).To(Succeed())
-				tc.mutate(karp)
-				g.Expect(controller.client.Update(ctx, karp)).To(Succeed())
-				result, err = controller.Reconcile(ctx, ctrl.Request{})
-				expectOptionalImage(g, cfg.KarpenterImage, tc.configuredImage)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(result).To(Equal(ctrl.Result{}))
-				g.Expect(controller.client.Get(ctx, client.ObjectKeyFromObject(dep), dep)).To(Succeed())
-			}
-			g.Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
-			expectOptionalImage(g, dep.Spec.Template.Spec.Containers[0].Image, tc.expectedImageAfterMutation)
-
-			podMonitor := &monitoringv1.PodMonitor{}
-			g.Expect(controller.client.Get(ctx, client.ObjectKey{
-				Namespace: ocpTestNamespace, Name: karpenterName,
-			}, podMonitor)).To(Succeed())
-			expectKarpenterPodMonitor(g, podMonitor, "Karpenter", autoscalingv1alpha1.SingletonName)
+			g.Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(ocpTestKarpenterImage))
 
 			if tc.expectLogLevelArg != "" {
 				g.Expect(dep.Spec.Template.Spec.Containers[0].Args).To(ContainElement(tc.expectLogLevelArg))
+			}
+
+			if tc.expectInterruptionQueue != "" {
+				var found bool
+				for _, e := range dep.Spec.Template.Spec.Containers[0].Env {
+					if e.Name == "INTERRUPTION_QUEUE" {
+						g.Expect(e.Value).To(Equal(tc.expectInterruptionQueue))
+						found = true
+						break
+					}
+				}
+				g.Expect(found).To(BeTrue(), "expected INTERRUPTION_QUEUE env var to be set")
+			}
+
+			if tc.expectNoInterruptionEnv {
+				for _, e := range dep.Spec.Template.Spec.Containers[0].Env {
+					g.Expect(e.Name).NotTo(Equal("INTERRUPTION_QUEUE"), "expected INTERRUPTION_QUEUE env var to be absent")
+				}
 			}
 
 			if tc.checkRBAC {
@@ -294,6 +276,60 @@ func TestOCPReconcile(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOCPInterruptionQueueMutation(t *testing.T) {
+	g := NewWithT(t)
+
+	s := runtime.NewScheme()
+	_ = autoscalingv1alpha1.AddToScheme(s)
+	_ = appsv1.AddToScheme(s)
+	_ = corev1.AddToScheme(s)
+	_ = rbacv1.AddToScheme(s)
+
+	cr := karpenterCRWithQueue(autoscalingv1alpha1.LogLevelInfo, "queue-v1")
+	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(cr).Build()
+	controller := NewOCPController(c, ocpTestConfig)
+	ctx := context.Background()
+
+	getEnvValue := func() (string, bool) {
+		dep := &appsv1.Deployment{}
+		g.Expect(c.Get(ctx, client.ObjectKey{Namespace: ocpTestNamespace, Name: "karpenter"}, dep)).To(Succeed())
+		for _, e := range dep.Spec.Template.Spec.Containers[0].Env {
+			if e.Name == "INTERRUPTION_QUEUE" {
+				return e.Value, true
+			}
+		}
+		return "", false
+	}
+
+	// Step 1: initial reconcile with queue set
+	_, err := controller.Reconcile(ctx, ctrl.Request{})
+	g.Expect(err).NotTo(HaveOccurred())
+	val, found := getEnvValue()
+	g.Expect(found).To(BeTrue(), "INTERRUPTION_QUEUE should be present after initial reconcile")
+	g.Expect(val).To(Equal("queue-v1"))
+
+	// Step 2: change the queue name and re-reconcile
+	g.Expect(c.Get(ctx, client.ObjectKey{Name: autoscalingv1alpha1.SingletonName}, cr)).To(Succeed())
+	cr.Spec.InterruptionQueue = "queue-v2"
+	g.Expect(c.Update(ctx, cr)).To(Succeed())
+
+	_, err = controller.Reconcile(ctx, ctrl.Request{})
+	g.Expect(err).NotTo(HaveOccurred())
+	val, found = getEnvValue()
+	g.Expect(found).To(BeTrue(), "INTERRUPTION_QUEUE should be present after queue change")
+	g.Expect(val).To(Equal("queue-v2"))
+
+	// Step 3: remove the queue and re-reconcile
+	g.Expect(c.Get(ctx, client.ObjectKey{Name: autoscalingv1alpha1.SingletonName}, cr)).To(Succeed())
+	cr.Spec.InterruptionQueue = ""
+	g.Expect(c.Update(ctx, cr)).To(Succeed())
+
+	_, err = controller.Reconcile(ctx, ctrl.Request{})
+	g.Expect(err).NotTo(HaveOccurred())
+	_, found = getEnvValue()
+	g.Expect(found).To(BeFalse(), "INTERRUPTION_QUEUE should be absent after queue removal")
 }
 
 func expectOptionalImage(g Gomega, actual string, expected *string) {

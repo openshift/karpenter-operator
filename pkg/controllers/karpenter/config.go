@@ -56,4 +56,5 @@ type operandConfig struct {
 	additionalVolumeMounts    []corev1.VolumeMount
 	additionalVolumes         []corev1.Volume
 	additionalInitContainers  []corev1.Container
+	interruptionQueue         string
 }
