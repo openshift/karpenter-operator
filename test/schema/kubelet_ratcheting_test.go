@@ -14,13 +14,14 @@ import (
 	. "github.com/onsi/gomega"
 
 	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
+	"github.com/openshift/karpenter-operator/test/schema/runner"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"sigs.k8s.io/yaml"
 )
 
-const kubeletRatchetingSuiteFilename = "stable.openshiftec2nodeclasses.kubelet-ratcheting.testsuite.yaml"
+const kubeletRatchetingSuiteFilename = "openshiftec2nodeclasses.kubelet-ratcheting.testsuite.yaml"
 
 // TestKubeletRatchetingSuiteCoversTypedFields guards the hand-written kubelet ratcheting suite:
 // every typed KubeletConfiguration field must be set in the initial, updated and expected objects,
@@ -36,7 +37,7 @@ func TestKubeletRatchetingSuiteCoversTypedFields(t *testing.T) {
 	raw, err := os.ReadFile(suitePath)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	var suite SuiteSpec
+	var suite runner.SuiteSpec
 	g.Expect(yaml.UnmarshalStrict(raw, &suite)).To(Succeed())
 	g.Expect(suite.Tests.OnUpdate).To(HaveLen(1), "the kubelet ratcheting suite must have exactly one onUpdate case")
 
