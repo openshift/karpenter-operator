@@ -167,6 +167,10 @@ func buildEnv(cfg *operandConfig, cloudCfg common.OperandCloudConfig) ([]*coreac
 		coreac.EnvVar().WithName(common.DisableWebhookEnvName).WithValue("true"),
 		coreac.EnvVar().WithName(common.HealthProbePortEnvName).WithValue(defaultHealthProbePortStr),
 	}
+	if cfg.interruptionQueue != "" {
+		env = append(env, coreac.EnvVar().WithName(common.InterruptionQueueEnvName).WithValue(cfg.interruptionQueue))
+	}
+
 	cloudEnv, err := envVars(cloudCfg.Env)
 	if err != nil {
 		return nil, err

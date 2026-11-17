@@ -100,6 +100,7 @@ func (c *OCPController) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Res
 		imagePullPolicy:   c.imagePullPolicy,
 		logLevelArg:       karp.Spec.LogLevel.Arg(),
 		priorityClassName: karpenterPodPriorityClassName,
+		interruptionQueue: karp.Spec.InterruptionQueue,
 	}
 	if err := applyDeployment(ctx, c.client, cfg, ref); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling Deployment: %w", err)

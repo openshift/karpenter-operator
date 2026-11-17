@@ -56,6 +56,12 @@ type KarpenterSpec struct {
 	// +kubebuilder:default=info
 	// +optional
 	LogLevel KarpenterLogLevel `json:"logLevel,omitempty"`
+
+	// InterruptionQueue is the name of the SQS queue for spot interruption
+	// events. When set, Karpenter monitors this queue and proactively
+	// replaces nodes that receive interruption notices.
+	// +optional
+	InterruptionQueue string `json:"interruptionQueue,omitempty"`
 }
 
 // KarpenterStatus defines the observed state of the Karpenter operand.

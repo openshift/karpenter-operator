@@ -193,6 +193,57 @@ var _ = Describe("Resources", Ordered, func() {
 			karp.Spec.LogLevel = autoscalingv1alpha1.LogLevelInfo
 			Expect(env.Client.Patch(ctx, karp, patch)).To(Succeed())
 		})
+
+		It("should propagate interruptionQueue to operand env var", func() {
+			if env.IsManagementCluster() {
+				Skip("OCP-path test: HCP interruptionQueue propagation requires HyperShift KarpenterAWSConfig.InterruptionQueueURL")
+			}
+
+			karp := &autoscalingv1alpha1.Karpenter{}
+			Expect(env.Client.Get(ctx, types.NamespacedName{Name: "default"}, karp)).To(Succeed())
+
+			patch := client.MergeFrom(karp.DeepCopy())
+			karp.Spec.InterruptionQueue = "test-interruption-queue"
+			Expect(env.Client.Patch(ctx, karp, patch)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(env.Client.Get(ctx, types.NamespacedName{
+					Name:      operandDeploymentName,
+					Namespace: operatorNamespace,
+				}, dep)).To(Succeed())
+
+				envVars := dep.Spec.Template.Spec.Containers[0].Env
+				var found bool
+				for _, e := range envVars {
+					if e.Name == "INTERRUPTION_QUEUE" {
+						g.Expect(e.Value).To(Equal("test-interruption-queue"))
+						found = true
+						break
+					}
+				}
+				g.Expect(found).To(BeTrue(), "expected INTERRUPTION_QUEUE env var on operand")
+			}, pollOneMinute, pollFiveSecond).Should(Succeed())
+
+			// Remove the queue and verify the env var is gone.
+			Expect(env.Client.Get(ctx, types.NamespacedName{Name: "default"}, karp)).To(Succeed())
+			patch = client.MergeFrom(karp.DeepCopy())
+			karp.Spec.InterruptionQueue = ""
+			Expect(env.Client.Patch(ctx, karp, patch)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				dep := &appsv1.Deployment{}
+				g.Expect(env.Client.Get(ctx, types.NamespacedName{
+					Name:      operandDeploymentName,
+					Namespace: operatorNamespace,
+				}, dep)).To(Succeed())
+
+				for _, e := range dep.Spec.Template.Spec.Containers[0].Env {
+					g.Expect(e.Name).NotTo(Equal("INTERRUPTION_QUEUE"),
+						"INTERRUPTION_QUEUE env var should be removed when queue is cleared")
+				}
+			}, pollOneMinute, pollFiveSecond).Should(Succeed())
+		})
 	})
 
 	Context("drift correction", func() {

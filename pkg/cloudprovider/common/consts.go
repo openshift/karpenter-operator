@@ -32,4 +32,8 @@ const (
 	// For AWS, this is the AWS region.
 	// For Azure, this is the Azure location.
 	RegionEnvName = "REGION"
+
+	// InterruptionQueueEnvName is the name of the SQS queue Karpenter
+	// monitors for spot interruption events.
+	InterruptionQueueEnvName = "INTERRUPTION_QUEUE"
 )
