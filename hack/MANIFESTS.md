@@ -1,21 +1,19 @@
 # Manifest Generation
 
-This repo uses two scripts to keep `install/` manifests in sync with upstream
-and the operator's RBAC requirements.
+This repo uses two scripts to keep `pkg/assets/` and `install/` manifests in sync with upstream and the operator's RBAC requirements.
 
 ## Architecture
 
 ```none
-  openshift/aws-karpenter-provider-aws
-  ├── charts/karpenter/crds/*.yaml      (raw CRDs)
-  └── charts/karpenter/templates/*.yaml (Helm RBAC templates)
+  openshift/aws-karpenter-provider-aws       vendor/github.com/aws/karpenter-provider-aws/pkg/apis/crds
+  └── charts/karpenter/templates/*.yaml      vendor/github.com/Azure/karpenter-provider-azure/pkg/apis/crds
+      (Helm RBAC templates)                  (provider CRDs incl. wrapped core CRDs)
           │                                    │
           │ ─ hack/manifest-diff-upstream.sh ─ │
           │                                    │
           ▼                                    ▼
-  pkg/assets/karpenter/*.yaml     pkg/assets/crds/*.yaml (core CRDs)
-  pkg/assets/aws/*.yaml           pkg/assets/azure/*.yaml (Azure CRD)
-  (operand RBAC + AWS CRD)       (operator applies at runtime)
+  pkg/assets/karpenter/*.yaml      pkg/assets/aws/*.yaml   (AWS RBAC + AWS CRD set)
+  (core operand RBAC)              pkg/assets/azure/*.yaml (Azure CRD set)
           │
           │         pkg/assets/operator/rbac.yaml
           │         (hand-maintained)
@@ -40,9 +38,8 @@ and the operator's RBAC requirements.
 | -------- | ----- | ---------- | -------- |
 | `pkg/assets/operator/rbac.yaml` | Hand-maintained | — (source only) | Operator's own SA, Roles, Bindings |
 | `pkg/assets/karpenter/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | Core operand RBAC |
-| `pkg/assets/aws/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | AWS-specific operand RBAC and EC2NodeClass CRD with OpenShift schema adjustments |
-| `pkg/assets/azure/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | AKSNodeClass CRD |
-| `pkg/assets/crds/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | Core Karpenter CRDs (NodePool, NodeClaim, NodeOverlay) |
+| `pkg/assets/aws/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | AWS-specific operand RBAC and CRDs |
+| `pkg/assets/azure/*.yaml` | `manifest-diff-upstream.sh` | Operator at runtime | Azure-specific CRDs |
 | `pkg/assets/hypershift/*.yaml` | `make manifests` (from `api/karpenter/`) | Operator at runtime (HCP mode) | OpenshiftEC2NodeClass CRD |
 | `install/04_rbac.yaml` | `manifest-diff.sh` | CVO | Operator RBAC + escalation superset |
 
@@ -70,12 +67,14 @@ on all documents via a `$CVO_ANNOTATIONS_YQ` yq expression.
 
 ### `hack/manifest-diff-upstream.sh`
 
-Fetches the OpenShift Karpenter fork, renders the Helm chart, and extracts:
+Fetches the OpenShift AWS Karpenter fork at `OPERAND_BRANCH`, renders its Helm chart, and extracts:
 
 - RBAC resources → `pkg/assets/karpenter/` and `pkg/assets/aws/`
-- Core CRDs → `pkg/assets/crds/`
-- AWS CRDs → `pkg/assets/aws/` (with OpenShift-specific schema adjustments)
-- Azure CRDs → `pkg/assets/azure/`
+
+Copies CRDs from the vendored provider modules:
+
+- `vendor/github.com/aws/karpenter-provider-aws/pkg/apis/crds` → `pkg/assets/aws/`
+- `vendor/github.com/Azure/karpenter-provider-azure/pkg/apis/crds` → `pkg/assets/azure/`
 
 Fails if upstream has RBAC resources not handled by an `extract` call.
 
@@ -99,7 +98,7 @@ Generates `install/04_rbac.yaml` by:
 **Upstream rebase** (new Karpenter version):
 
 ```bash
-# Update OPERAND_BRANCH in the Makefile, then bump the Go pins and sync the assets:
+# Update OPERAND_BRANCH in the Makefile, then bump forks and sync assets:
 make bump-forks
 ```
 

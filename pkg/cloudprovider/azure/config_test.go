@@ -7,7 +7,10 @@ import (
 
 	"github.com/openshift/karpenter-operator/pkg/assets"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	azurekarpenterapis "github.com/Azure/karpenter-provider-azure/pkg/apis"
+	"github.com/samber/lo"
 )
 
 const (
@@ -74,21 +77,22 @@ func TestAzureProvider(t *testing.T) {
 		g.Expect(cfg.Volumes).To(BeEmpty())
 	})
 
-	t.Run("When CRDs is called it should return AKSNodeClass from assets", func(t *testing.T) {
+	t.Run("When CRDs is called, it should return the Azure CRD set from assets", func(t *testing.T) {
 		g := NewWithT(t)
 
 		crds := p.CRDs()
 		g.Expect(crds).To(HaveLen(len(assets.AzureCRDs)))
-		g.Expect(crds[0].Name).To(Equal("aksnodeclasses.karpenter.azure.com"))
-		g.Expect(crds[0]).To(BeIdenticalTo(assets.AzureCRDs[0]))
-	})
-
-	t.Run("When CRDs is called it should return NodeOverlay from assets", func(t *testing.T) {
-		g := NewWithT(t)
-
-		crds := p.CRDs()
-		g.Expect(crds[1].Name).To(Equal("nodeoverlays.karpenter.sh"))
-		g.Expect(crds[1]).To(BeIdenticalTo(assets.AzureCRDs[1]))
+		for i, crd := range crds {
+			g.Expect(crd).To(BeIdenticalTo(assets.AzureCRDs[i]))
+		}
+		g.Expect(lo.Map(crds, func(crd *apiextensionsv1.CustomResourceDefinition, _ int) string {
+			return crd.Name
+		})).To(Equal([]string{
+			"nodepools.karpenter.sh",
+			"nodeclaims.karpenter.sh",
+			"nodeoverlays.karpenter.sh",
+			"aksnodeclasses.karpenter.azure.com",
+		}))
 	})
 
 	t.Run("When RBAC is called it should return empty assets", func(t *testing.T) {

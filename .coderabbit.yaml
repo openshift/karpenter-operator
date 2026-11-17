@@ -16,6 +16,12 @@ reviews:
     - "!**/vendor/**"
     - "!**/zz_generated*"
     - "!**/go.sum"
+    - "!pkg/assets/aws/**"
+    - "!pkg/assets/azure/**"
+    - "!pkg/assets/hypershift/*.yaml"
+    - "!pkg/assets/karpenter/**"
+    - "!install/00_autoscaling.openshift.io_karpenters.yaml"
+    - "!install/04_rbac.yaml"
 
   path_instructions:
     - path: "pkg/controllers/**/*.go"

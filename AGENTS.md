@@ -67,7 +67,7 @@ Never edit these files directly:
 
 - `api/karpenter/v1/zz_generated.deepcopy.go` and `pkg/apis/autoscaling/v1alpha1/zz_generated.deepcopy.go` — `make generate`
 - `install/00_autoscaling.openshift.io_karpenters.yaml` and `pkg/assets/hypershift/*.yaml` — `make manifests`
-- `pkg/assets/karpenter/*.yaml`, `pkg/assets/aws/*.yaml`, and `pkg/assets/crds/*.yaml` — `make manifest-diff-sync`
+- `pkg/assets/karpenter/*.yaml`, `pkg/assets/aws/*.yaml`, and `pkg/assets/azure/*.yaml` — `make manifest-diff-sync`
 - `install/04_rbac.yaml` — `make manifest-diff-sync`
 
 `make verify` checks generated content and working-tree cleanliness.

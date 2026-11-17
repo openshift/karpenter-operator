@@ -32,6 +32,7 @@ type CloudProvider interface {
 	HCPNodeClassProvider() HCPNodeClassProvider
 	KarpenterImage() string
 	OperandConfig() OperandCloudConfig
+	// CRDs returns all Karpenter CRDs installed into the target cluster, including wrapped core CRDs.
 	CRDs() []*apiextensionsv1.CustomResourceDefinition
 	RBAC() RBACAssets
 	RelatedObjects() []configv1.ObjectReference
