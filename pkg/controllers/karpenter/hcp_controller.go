@@ -152,6 +152,9 @@ func (c *HCPController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		},
 		additionalInitContainers: []corev1.Container{tokenMinterContainer(c.config.TokenMinterImage)},
 	}
+	if queueName := hcp.Spec.AutoNode.Provisioner.Karpenter.AWS.InterruptionQueueName; queueName != "" {
+		cfg.additionalEnv = append(cfg.additionalEnv, corev1.EnvVar{Name: "INTERRUPTION_QUEUE", Value: queueName})
+	}
 	if err := applyDeployment(ctx, c.client, cfg, ref); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling Deployment: %w", err)
 	}

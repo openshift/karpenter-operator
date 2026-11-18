@@ -293,7 +293,7 @@ github.com/onsi/gomega/matchers/support/goraph/edge
 github.com/onsi/gomega/matchers/support/goraph/node
 github.com/onsi/gomega/matchers/support/goraph/util
 github.com/onsi/gomega/types
-# github.com/openshift/api v0.0.0-20260805160557-b61243060d5f
+# github.com/openshift/api v0.0.0-20261028163820-1f109e9eefc7
 ## explicit; go 1.26.0
 github.com/openshift/api/config/v1
 github.com/openshift/api/operator/v1
@@ -301,7 +301,7 @@ github.com/openshift/api/operator/v1
 ## explicit; go 1.26.0
 github.com/openshift/client-go/config/applyconfigurations/config/v1
 github.com/openshift/client-go/config/applyconfigurations/internal
-# github.com/openshift/hypershift/api v0.0.0-20260923105227-caf541dfb4c0
+# github.com/openshift/hypershift/api v0.0.0-20260923105227-caf541dfb4c0 => ../hypershift/api
 ## explicit; go 1.26.0
 github.com/openshift/hypershift/api/hypershift/v1beta1
 github.com/openshift/hypershift/api/ibmcapi
@@ -506,7 +506,7 @@ gopkg.in/evanphx/json-patch.v4
 # gopkg.in/inf.v0 v0.9.1
 ## explicit
 gopkg.in/inf.v0
-# k8s.io/api v0.37.0
+# k8s.io/api v0.37.1
 ## explicit; go 1.26.0
 k8s.io/api/admission/v1
 k8s.io/api/admission/v1beta1
@@ -579,7 +579,7 @@ k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset
 k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/scheme
 k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1
 k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1
-# k8s.io/apimachinery v0.37.0
+# k8s.io/apimachinery v0.37.1
 ## explicit; go 1.26.0
 k8s.io/apimachinery/pkg/api/equality
 k8s.io/apimachinery/pkg/api/errors
@@ -1069,3 +1069,4 @@ sigs.k8s.io/yaml
 # github.com/Azure/karpenter-provider-azure => github.com/openshift/Azure-karpenter-provider-azure v0.0.0-20261026235616-bc70c7241ed3
 # sigs.k8s.io/karpenter => github.com/openshift/kubernetes-sigs-karpenter v0.0.0-20261021200634-6d0051169286
 # github.com/openshift/karpenter-operator/api => ./api
+# github.com/openshift/hypershift/api => ../hypershift/api
