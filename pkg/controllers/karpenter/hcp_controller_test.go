@@ -207,6 +207,14 @@ func TestHCPReconcile(t *testing.T) {
 	overrideHCP.Annotations = map[string]string{openshiftkarpenterv1.KarpenterImageOverrideAnnotation: overrideImage}
 	emptyPullSecretHCP := hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter)
 	emptyPullSecretHCP.Spec.PullSecret.Name = ""
+	interruptionQueueHCP := hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter)
+	interruptionQueueHCP.Spec.AutoNode.Provisioner.Karpenter = hyperv1beta1.KarpenterConfig{
+		Platform: hyperv1beta1.AWSPlatform,
+		AWS: hyperv1beta1.KarpenterAWSConfig{
+			RoleARN:               "arn:aws:iam::123456789012:role/karpenter",
+			InterruptionQueueName: "my-cluster-karpenter-interruption",
+		},
+	}
 	tests := map[string]struct {
 		objects                     []client.Object
 		configuredImage             *string
@@ -354,6 +362,24 @@ func TestHCPReconcile(t *testing.T) {
 					HaveField("Name", Equal(targetKubeconfigVolumeName)),
 					HaveField("Secret.SecretName", Equal(hcpTestUpdatedInfraID+"-kubeconfig")),
 				)))
+			},
+		},
+		"When interruptionQueueName is set, it should set INTERRUPTION_QUEUE on the karpenter container": {
+			objects:        []client.Object{interruptionQueueHCP.DeepCopy()},
+			expectOperands: true,
+			check: func(g Gomega, dep *appsv1.Deployment, _ *corev1.ServiceAccount) {
+				g.Expect(dep.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "INTERRUPTION_QUEUE", Value: "my-cluster-karpenter-interruption"}))
+			},
+		},
+		"When interruptionQueueName is removed, it should remove INTERRUPTION_QUEUE from the karpenter container": {
+			objects:        []client.Object{interruptionQueueHCP.DeepCopy()},
+			expectOperands: true,
+			mutate: func(ctx context.Context, cl client.Client) error {
+				return cl.Patch(ctx, hcpWithProvisioner(hyperv1beta1.ProvisionerKarpenter),
+					client.RawPatch(types.MergePatchType, []byte(`{"spec":{"autoNode":{"provisionerConfig":{"karpenter":{"aws":{"interruptionQueueName":null}}}}}}`)))
+			},
+			check: func(g Gomega, dep *appsv1.Deployment, _ *corev1.ServiceAccount) {
+				g.Expect(dep.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(HaveField("Name", "INTERRUPTION_QUEUE")))
 			},
 		},
 		"When the override is added, it should update the Deployment image": {
