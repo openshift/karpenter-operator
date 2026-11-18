@@ -61,6 +61,25 @@ type ComponentLogLevelSpec struct {
 // +kubebuilder:validation:MinProperties=1
 type KubeAPIServerOperatorSpec struct {
 	ComponentLogLevelSpec `json:",inline"`
+
+	// eventTTLMinutes specifies the amount of time, in minutes, that events are stored
+	// in etcd before being deleted.
+	// The TTL is allowed between 5 minutes minimum up to a maximum of 180 minutes (3 hours).
+	//
+	// Lowering this value will reduce the storage required in etcd. Note that this setting
+	// will only apply to new events being created and will not update existing events.
+	//
+	// Changing this value causes the kube-apiserver to be rolled out with the new setting.
+	//
+	// When omitted this means no opinion, and the platform is left to choose a reasonable
+	// default, which is subject to change over time.
+	// The current default value is 180 minutes (3 hours).
+	//
+	// +kubebuilder:validation:Minimum=5
+	// +kubebuilder:validation:Maximum=180
+	// +openshift:enable:FeatureGate=KubeAPIServerEventTTL
+	// +optional
+	EventTTLMinutes int32 `json:"eventTTLMinutes,omitempty"`
 }
 
 // EtcdOperatorSpec specifies the configuration for the etcd.
@@ -391,4 +410,55 @@ type IngressDefaultCertificateReference struct {
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:XValidation:rule="self.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="name must be a valid DNS subdomain name: contain no more than 253 characters, contain only lowercase alphanumeric characters, '-' or '.', and start and end with an alphanumeric character"
 	Name string `json:"name,omitempty"`
+}
+
+// CSIDriverOperatorSpec specifies configuration for the CSI driver operator
+// running in the control plane. Platform-specific configuration is nested per platform.
+// +kubebuilder:validation:MinProperties=1
+type CSIDriverOperatorSpec struct {
+	// aws configures the AWS EBS CSI driver.
+	// It can only be set when spec.platform.type is AWS.
+	//
+	// When omitted, no AWS-specific CSI driver configuration is applied and the
+	// default StorageClass uses the AWS account's default EBS encryption settings.
+	// +optional
+	AWS AWSCSIDriverConfig `json:"aws,omitzero"`
+}
+
+// AWSCSIDriverConfig specifies configuration for the AWS EBS CSI driver.
+// +kubebuilder:validation:MinProperties=1
+type AWSCSIDriverConfig struct {
+	// initialKMSKeyARN is the ARN of an AWS KMS key used to encrypt volumes
+	// created by the default StorageClass. When set, new PersistentVolumes
+	// provisioned by the default StorageClass are encrypted with this key
+	// instead of the AWS account's default EBS encryption key.
+	//
+	// When omitted, no KMS key is configured on the default StorageClass and
+	// EBS volumes are encrypted with the AWS account's default EBS encryption
+	// key.
+	//
+	// The value may be either the ARN or Alias ARN of a KMS key and must follow
+	// the format arn:<partition>:kms:<region>:<account-id>:(key|alias)/<key-id-or-alias>,
+	// where <partition> is one of aws, aws-cn, aws-us-gov, aws-iso, aws-iso-b,
+	// aws-iso-e, or aws-iso-f; <region> is the AWS region; <account-id> is the
+	// 12-digit AWS account identifier; and <key-id-or-alias> is the KMS key ID
+	// or alias name. The key must be in the same region as the cluster
+	// (spec.platform.aws.region).
+	//
+	// When set, must be between 1 and 2048 characters.
+	//
+	// This field can only be set when the HostedCluster is created and is
+	// immutable afterwards. Day-2 changes to storage encryption must be made
+	// directly on the ClusterCSIDriver resource in the hosted cluster.
+	//
+	// The IAM role in spec.platform.aws.rolesRef.storageARN must have
+	// kms:Decrypt, kms:GenerateDataKeyWithoutPlaintext, and kms:CreateGrant
+	// permissions on the specified key.
+	//
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:XValidation:rule="self.matches('^arn:(aws|aws-cn|aws-us-gov|aws-iso|aws-iso-b|aws-iso-e|aws-iso-f):kms:[a-z]([a-z0-9]|-[a-z0-9])*:[0-9]{12}:(key|alias)/.+$')",message="initialKMSKeyARN must be a valid AWS KMS key ARN in the format: arn:<partition>:kms:<region>:<account-id>:(key|alias)/<key-id-or-alias>"
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="initialKMSKeyARN is immutable"
+	InitialKMSKeyARN string `json:"initialKMSKeyARN,omitempty"`
 }

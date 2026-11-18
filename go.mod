@@ -10,16 +10,16 @@ require (
 	github.com/aws/karpenter-provider-aws v0.0.0
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
-	github.com/openshift/api v0.0.0-20260805160557-b61243060d5f
+	github.com/openshift/api v0.0.0-20261028163820-1f109e9eefc7
 	github.com/openshift/client-go v0.0.0-20260721124015-35d8f3c0e847
 	github.com/openshift/hypershift/api v0.0.0-20260923105227-caf541dfb4c0
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.94.1
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.94.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/samber/lo v1.53.0
-	k8s.io/api v0.37.0
+	k8s.io/api v0.37.1
 	k8s.io/apiextensions-apiserver v0.37.0
-	k8s.io/apimachinery v0.37.0
+	k8s.io/apimachinery v0.37.1
 	k8s.io/client-go v0.37.0
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
@@ -123,3 +123,5 @@ replace github.com/Azure/karpenter-provider-azure => github.com/openshift/Azure-
 replace sigs.k8s.io/karpenter => github.com/openshift/kubernetes-sigs-karpenter v0.0.0-20261021200634-6d0051169286
 
 replace github.com/openshift/karpenter-operator/api => ./api
+
+replace github.com/openshift/hypershift/api => ../hypershift/api
