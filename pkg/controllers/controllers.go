@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/openshift/karpenter-operator/pkg/assets"
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 	"github.com/openshift/karpenter-operator/pkg/controllers/clusteroperator"
 	"github.com/openshift/karpenter-operator/pkg/controllers/crd"
@@ -124,7 +123,7 @@ func newHCPNodeClassProvider(cfg *Config) common.HCPNodeClassProvider {
 
 // karpenterCRDs returns the CRDs installed into the target cluster.
 func karpenterCRDs(cfg *Config, hcpNodeClassProvider common.HCPNodeClassProvider) []*apiextensionsv1.CustomResourceDefinition {
-	crds := append(slices.Clone(assets.CoreCRDs), cfg.CloudProvider.CRDs()...)
+	crds := slices.Clone(cfg.CloudProvider.CRDs())
 	if hcpNodeClassProvider != nil {
 		crds = append(crds, hcpNodeClassProvider.CRDs()...)
 	}

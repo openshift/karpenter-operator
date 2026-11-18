@@ -11,7 +11,8 @@ import (
 	. "github.com/onsi/gomega"
 
 	autoscalingv1alpha1 "github.com/openshift/karpenter-operator/pkg/apis/autoscaling/v1alpha1"
-	"github.com/openshift/karpenter-operator/pkg/assets"
+	cloudaws "github.com/openshift/karpenter-operator/pkg/cloudprovider/aws"
+	cloudazure "github.com/openshift/karpenter-operator/pkg/cloudprovider/azure"
 	"github.com/openshift/karpenter-operator/pkg/controllers"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -140,22 +141,13 @@ var _ = Describe("Resources", Ordered, func() {
 	})
 
 	Context("CRDs", func() {
-		It("should install core CRDs", func() {
-			for _, expected := range assets.CoreCRDs {
-				crd := &apiextensionsv1.CustomResourceDefinition{}
-				Eventually(func(g Gomega) {
-					g.Expect(env.Client.Get(ctx, types.NamespacedName{Name: expected.Name}, crd)).To(Succeed())
-					g.Expect(crdEstablished(crd)).To(BeTrue(), "CRD %s should be Established", expected.Name)
-				}, pollOneMinute, pollFiveSecond).Should(Succeed())
-			}
-		})
-
-		It("should install AWS CRDs", func() {
-			if !env.IsAWSPlatform() {
-				Skip("not an AWS cluster")
+		It("should install the provider CRDs", func() {
+			expectedCRDs := providerCRDs()
+			if len(expectedCRDs) == 0 {
+				Skip("no provider CRDs known for this platform")
 			}
 
-			for _, expected := range assets.AWSCRDs {
+			for _, expected := range expectedCRDs {
 				crd := &apiextensionsv1.CustomResourceDefinition{}
 				Eventually(func(g Gomega) {
 					g.Expect(env.Client.Get(ctx, types.NamespacedName{Name: expected.Name}, crd)).To(Succeed())
@@ -234,7 +226,12 @@ var _ = Describe("Resources", Ordered, func() {
 		})
 
 		It("should reconcile a deleted CRD", func() {
-			target := assets.CoreCRDs[0]
+			expectedCRDs := providerCRDs()
+			if len(expectedCRDs) == 0 {
+				Skip("no provider CRDs known for this platform")
+			}
+
+			target := expectedCRDs[0]
 			key := types.NamespacedName{Name: target.Name}
 
 			existing := &apiextensionsv1.CustomResourceDefinition{}
@@ -364,4 +361,15 @@ func crdEstablished(crd *apiextensionsv1.CustomResourceDefinition) bool {
 		}
 	}
 	return false
+}
+
+// providerCRDs returns the CRD set the operator installs for the cluster platform under test.
+func providerCRDs() []*apiextensionsv1.CustomResourceDefinition {
+	switch env.Infrastructure.PlatformType {
+	case configv1.AWSPlatformType:
+		return (&cloudaws.Provider{}).CRDs()
+	case configv1.AzurePlatformType:
+		return (&cloudazure.Provider{}).CRDs()
+	}
+	return nil
 }

@@ -1,0 +1,8 @@
+# Mark generated files so GitHub collapses them in PR diffs.
+
+pkg/assets/aws/*.yaml linguist-generated=true
+pkg/assets/azure/*.yaml linguist-generated=true
+pkg/assets/hypershift/*.yaml linguist-generated=true
+pkg/assets/karpenter/*.yaml linguist-generated=true
+install/00_autoscaling.openshift.io_karpenters.yaml linguist-generated=true
+install/04_rbac.yaml linguist-generated=true

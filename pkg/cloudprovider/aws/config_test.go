@@ -8,6 +8,10 @@ import (
 	"github.com/openshift/karpenter-operator/pkg/assets"
 
 	awskarpenterapis "github.com/aws/karpenter-provider-aws/pkg/apis"
+
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
+	"github.com/samber/lo"
 )
 
 const (
@@ -67,13 +71,22 @@ func TestAWSProvider(t *testing.T) {
 		g.Expect(cfg.Volumes[0].Secret.SecretName).To(Equal(operandCredentialsSecret))
 	})
 
-	t.Run("When CRDs is called it should return EC2NodeClass from assets", func(t *testing.T) {
+	t.Run("When CRDs is called, it should return the AWS CRD set from assets", func(t *testing.T) {
 		g := NewWithT(t)
 
 		crds := p.CRDs()
-		g.Expect(crds).To(HaveLen(1))
-		g.Expect(crds[0].Name).To(Equal("ec2nodeclasses.karpenter.k8s.aws"))
-		g.Expect(crds[0]).To(BeIdenticalTo(assets.AWSCRDs[0]))
+		g.Expect(crds).To(HaveLen(len(assets.AWSCRDs)))
+		for i, crd := range crds {
+			g.Expect(crd).To(BeIdenticalTo(assets.AWSCRDs[i]))
+		}
+		g.Expect(lo.Map(crds, func(crd *apiextensionsv1.CustomResourceDefinition, _ int) string {
+			return crd.Name
+		})).To(Equal([]string{
+			"nodepools.karpenter.sh",
+			"nodeclaims.karpenter.sh",
+			"nodeoverlays.karpenter.sh",
+			"ec2nodeclasses.karpenter.k8s.aws",
+		}))
 	})
 
 	t.Run("When RBAC is called it should return AWS RBAC from assets", func(t *testing.T) {

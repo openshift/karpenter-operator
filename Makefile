@@ -206,7 +206,7 @@ bump-forks: ## Bump all fork replaces to their branches, re-vendor and sync the 
 define bump-fork
 	@echo "==> Bumping $(2) to branch $(3)"
 	go mod edit -replace=$(1)=$(2)@$(3)
-	$(MAKE) vendor
+	$(MAKE) deps
 	@grep '^replace $(1) ' go.mod
 endef
 

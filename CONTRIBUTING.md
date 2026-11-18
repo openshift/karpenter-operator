@@ -90,7 +90,7 @@ Do not edit generated files directly:
 
 - `api/karpenter/v1/zz_generated.deepcopy.go` and `pkg/apis/autoscaling/v1alpha1/zz_generated.deepcopy.go` — run `make generate`
 - `install/00_autoscaling.openshift.io_karpenters.yaml` and `pkg/assets/hypershift/*.yaml` — run `make manifests`
-- `pkg/assets/karpenter/*.yaml`, `pkg/assets/aws/*.yaml`, and `pkg/assets/crds/*.yaml` — run `make manifest-diff-sync`
+- `pkg/assets/karpenter/*.yaml`, `pkg/assets/aws/*.yaml`, and `pkg/assets/azure/*.yaml` — run `make manifest-diff-sync`
 - `install/04_rbac.yaml` — run `make manifest-diff-sync`
 
 Commit generated changes with their source changes.

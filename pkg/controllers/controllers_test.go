@@ -121,19 +121,19 @@ func TestKarpenterCRDs(t *testing.T) {
 	}{
 		"When running in standalone AWS mode, it should not install the OpenshiftEC2NodeClass CRD": {
 			cloudProvider: awsProvider,
-			wantCRDs:      []string{"nodepools.karpenter.sh", "nodeclaims.karpenter.sh", "ec2nodeclasses.karpenter.k8s.aws"},
+			wantCRDs:      []string{"nodepools.karpenter.sh", "nodeclaims.karpenter.sh", "nodeoverlays.karpenter.sh", "ec2nodeclasses.karpenter.k8s.aws"},
 		},
 		"When running in HCP AWS mode, it should also install the OpenshiftEC2NodeClass CRD": {
 			cloudProvider:     awsProvider,
 			hostedCluster:     hostedCluster,
 			managementCluster: true,
-			wantCRDs:          []string{"nodepools.karpenter.sh", "nodeclaims.karpenter.sh", "ec2nodeclasses.karpenter.k8s.aws", "openshiftec2nodeclasses.karpenter.hypershift.openshift.io"},
+			wantCRDs:          []string{"nodepools.karpenter.sh", "nodeclaims.karpenter.sh", "nodeoverlays.karpenter.sh", "ec2nodeclasses.karpenter.k8s.aws", "openshiftec2nodeclasses.karpenter.hypershift.openshift.io"},
 		},
 		"When running in HCP Azure mode, it should also install the OpenShiftAzureNodeClass CRD": {
 			cloudProvider:     &azure.Provider{},
 			hostedCluster:     hostedCluster,
 			managementCluster: true,
-			wantCRDs:          []string{"nodepools.karpenter.sh", "nodeclaims.karpenter.sh", "aksnodeclasses.karpenter.azure.com", "nodeoverlays.karpenter.sh", "openshiftazurenodeclasses.karpenter.hypershift.openshift.io"},
+			wantCRDs:          []string{"nodepools.karpenter.sh", "nodeclaims.karpenter.sh", "nodeoverlays.karpenter.sh", "aksnodeclasses.karpenter.azure.com", "openshiftazurenodeclasses.karpenter.hypershift.openshift.io"},
 		},
 	}
 

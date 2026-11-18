@@ -14,7 +14,7 @@ fi
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-oc apply -f "$SCRIPT_DIR/../../pkg/assets/crds/karpenter.sh_nodeoverlays.yaml"
+oc apply -f "$SCRIPT_DIR/../../pkg/assets/aws/karpenter.sh_nodeoverlays.yaml"
 
 # snapshot the default nodeclass so that the upstream tests can recreate them before each test
 TMPFILE=$(mktemp)
