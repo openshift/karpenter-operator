@@ -68,6 +68,8 @@ github.com/Azure/skewer v0.0.24 h1:6u+/o+LO6ufDnpk08KruOAeUDWm62Fi1DcbAY8EFdPA=
 github.com/Azure/skewer v0.0.24/go.mod h1:KwKqaVxdP/XSYDvWiIxbvBRDcm+cQ8lRAwKRPNGsxMg=
 github.com/AzureAD/microsoft-authentication-library-for-go v1.7.2 h1:RHK7bS+HQMslb1sZpAokUt+zTVmue0hKSs2C791hhzU=
 github.com/AzureAD/microsoft-authentication-library-for-go v1.7.2/go.mod h1:HKpQxkWaGLJ+D/5H8QRpyQXA1eKjxkFlOMwck5+33Jk=
+github.com/LucasAndFlores/Azure-karpenter-provider-azure v0.0.0-20261119125639-f578a3846dc9 h1:Rn9lJ4u0sto6sJYXvxQ1uGklMVTMbCmpbYNBu5eazK0=
+github.com/LucasAndFlores/Azure-karpenter-provider-azure v0.0.0-20261119125639-f578a3846dc9/go.mod h1:fvaB6HFshy1NZTJVEb9RA8LHzp4PLSPvbjUkb9J8mQU=
 github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAwZ/2OOE=
 github.com/Masterminds/semver/v3 v3.5.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/Pallinder/go-randomdata v1.2.0 h1:DZ41wBchNRb/0GfsePLiSwb0PHZmT67XY00lCDlaYPg=
@@ -286,8 +288,6 @@ github.com/onsi/ginkgo/v2 v2.32.0 h1:Hw7s2pVrQo/8Yz5N77qdnpHaoc+c6cC9WIV1Jce+J6E
 github.com/onsi/ginkgo/v2 v2.32.0/go.mod h1:+aXOY+vzZ5mu2iI2HpTZUPmM//oQfsNFX6gU9kNcA44=
 github.com/onsi/gomega v1.42.1 h1:iN1rCUX+44NZ1Dc97MPoeFYbFR0vh8zxoxMFwKdyZ6I=
 github.com/onsi/gomega v1.42.1/go.mod h1:REff/hsDsodHoKlWsP2mAPhu1+5/6hVYNf9rIEBpeSg=
-github.com/openshift/Azure-karpenter-provider-azure v0.0.0-20261026235616-bc70c7241ed3 h1:JYuiqhFh4pxeudsvuPTld3vKq3qZW6f4i+bKF2vnluI=
-github.com/openshift/Azure-karpenter-provider-azure v0.0.0-20261026235616-bc70c7241ed3/go.mod h1:fvaB6HFshy1NZTJVEb9RA8LHzp4PLSPvbjUkb9J8mQU=
 github.com/openshift/api v0.0.0-20260805160557-b61243060d5f h1:NU7ltJhtFhqAJC+77DcNk6jmIpsJ3a+mebZIceiPW+U=
 github.com/openshift/api v0.0.0-20260805160557-b61243060d5f/go.mod h1:k6qH5QOVa5GDln2VVm8Jz4NV3Z7R2SATHFLwGS6Wh3M=
 github.com/openshift/aws-karpenter-provider-aws v0.0.0-20261013185003-aa136f7fdc38 h1:CuYsKycVrwNzeaqOO/NczKje2MVe9Bbif4ZARlQjlUc=

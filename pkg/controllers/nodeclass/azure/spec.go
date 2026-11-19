@@ -43,30 +43,30 @@ func aksNodeClassSpec(spec openshiftkarpenterv1alpha1.OpenShiftAzureNodeClassSpe
 	}
 }
 
-// reconcileAKSNodeClassRelease adds the image and user data from the user data Secret to the desired spec.
+// reconcileAKSNodeClassRelease adds the images and user data from the user data Secret to the desired spec.
 // Unpinned NodeClasses keep their current values while the control plane upgrades.
 func reconcileAKSNodeClassRelease(desired *azurekarpenterv1beta1.AKSNodeClassSpec, current azurekarpenterv1beta1.AKSNodeClassSpec, nodeClass *openshiftkarpenterv1alpha1.OpenShiftAzureNodeClass, hcp *hyperv1beta1.HostedControlPlane, userDataSecret *corev1.Secret) error {
-	// Unpinned NodeClasses keep their current userData and image while the control plane upgrades.
+	// Unpinned NodeClasses keep their current userData and images while the control plane upgrades.
 	// This also holds back rotated ignition tokens, which is fine: a token is valid for 11h and rotated
 	// after half of that, so a replaced token stays valid for another 5.5h.
-	if hypershift.WaitsForControlPlaneUpgrade(hcp, nodeClass.Spec.Version) && current.UserData != nil && current.MarketplaceImage != nil {
+	if hypershift.WaitsForControlPlaneUpgrade(hcp, nodeClass.Spec.Version) && current.UserData != nil && len(current.MarketplaceImages) > 0 {
 		desired.UserData = current.UserData
-		desired.MarketplaceImage = current.MarketplaceImage
+		desired.MarketplaceImages = current.MarketplaceImages
 		return nil
 	}
 
-	marketplaceImage, err := marketplaceImageFromUserDataSecret(userDataSecret)
+	marketplaceImages, err := marketplaceImagesFromUserDataSecret(userDataSecret)
 	if err != nil {
 		return err
 	}
 	desired.UserData = new(string(userDataSecret.Data["value"]))
-	desired.MarketplaceImage = marketplaceImage
+	desired.MarketplaceImages = marketplaceImages
 	return nil
 }
 
-// marketplaceImageFromUserDataSecret returns the Azure Marketplace image from the annotations of the user data Secret.
+// marketplaceImagesFromUserDataSecret returns the Azure Marketplace image URN from the annotations of the user data Secret.
 // Only the unsuffixed amd64 keys are read; further image metadata changes are tracked in AUTOSCALE-1084.
-func marketplaceImageFromUserDataSecret(secret *corev1.Secret) (*azurekarpenterv1beta1.MarketplaceImage, error) {
+func marketplaceImagesFromUserDataSecret(secret *corev1.Secret) ([]string, error) {
 	for _, annotation := range []string{
 		marketplacePublisherAnnotation,
 		marketplaceOfferAnnotation,
@@ -77,10 +77,12 @@ func marketplaceImageFromUserDataSecret(secret *corev1.Secret) (*azurekarpenterv
 			return nil, fmt.Errorf("user data secret %s/%s has missing or empty annotation %q", secret.Namespace, secret.Name, annotation)
 		}
 	}
-	return &azurekarpenterv1beta1.MarketplaceImage{
-		Publisher: secret.Annotations[marketplacePublisherAnnotation],
-		Offer:     secret.Annotations[marketplaceOfferAnnotation],
-		SKU:       secret.Annotations[marketplaceSKUAnnotation],
-		Version:   secret.Annotations[marketplaceVersionAnnotation],
-	}, nil
+
+	// TODO(LucasAndFlores): This formatting should be removed after we merge AUTOSCALE-1084 in hypershift.
+	return []string{fmt.Sprintf("%s:%s:%s:%s",
+		secret.Annotations[marketplacePublisherAnnotation],
+		secret.Annotations[marketplaceOfferAnnotation],
+		secret.Annotations[marketplaceSKUAnnotation],
+		secret.Annotations[marketplaceVersionAnnotation],
+	)}, nil
 }

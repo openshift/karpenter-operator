@@ -103,10 +103,10 @@ func (in *AKSNodeClassSpec) DeepCopyInto(out *AKSNodeClassSpec) {
 		*out = new(string)
 		**out = **in
 	}
-	if in.MarketplaceImage != nil {
-		in, out := &in.MarketplaceImage, &out.MarketplaceImage
-		*out = new(MarketplaceImage)
-		**out = **in
+	if in.MarketplaceImages != nil {
+		in, out := &in.MarketplaceImages, &out.MarketplaceImages
+		*out = make([]string, len(*in))
+		copy(*out, *in)
 	}
 	if in.ImageFamily != nil {
 		in, out := &in.ImageFamily, &out.ImageFamily
