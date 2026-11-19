@@ -1,0 +1,30 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    k8s-app: karpenter-operator
+  name: karpenter-operator
+  namespace: openshift-karpenter
+  annotations:
+    exclude.release.openshift.io/internal-openshift-hosted: "true"
+    include.release.openshift.io/self-managed-high-availability: "true"
+    release.openshift.io/feature-gate: KarpenterOperator
+spec:
+  selector:
+    matchLabels:
+      k8s-app: karpenter-operator
+  namespaceSelector:
+    matchNames:
+      - openshift-karpenter
+  serviceDiscoveryRole: EndpointSlice
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        caFile: /etc/prometheus/configmaps/serving-certs-ca-bundle/service-ca.crt
+        serverName: karpenter-operator.openshift-karpenter.svc
+        certFile: /etc/prometheus/secrets/metrics-client-certs/tls.crt
+        keyFile: /etc/prometheus/secrets/metrics-client-certs/tls.key

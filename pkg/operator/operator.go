@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	karpenterapis "sigs.k8s.io/karpenter/pkg/apis"
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 
@@ -204,6 +203,10 @@ func runClusterOperatorReporter(ctx context.Context, restCfg *rest.Config, opts 
 }
 
 func newManager(restCfg *rest.Config, opts Options) (ctrl.Manager, error) {
+	metrics, err := metricsServerOptions(opts)
+	if err != nil {
+		return nil, err
+	}
 	mgr, err := ctrl.NewManager(restCfg, ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
@@ -211,7 +214,7 @@ func newManager(restCfg *rest.Config, opts Options) (ctrl.Manager, error) {
 				opts.Namespace: {},
 			},
 		},
-		Metrics:                server.Options{BindAddress: opts.MetricsAddr},
+		Metrics:                metrics,
 		HealthProbeBindAddress: opts.ProbeAddr,
 		LeaderElection:         opts.LeaderElect,
 		LeaderElectionID:       "karpenter-operator.openshift.io",

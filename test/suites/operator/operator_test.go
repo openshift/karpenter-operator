@@ -3,8 +3,14 @@ package operator
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -18,15 +24,18 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
+	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/portforward"
+	"k8s.io/client-go/transport/spdy"
 
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
 )
@@ -104,39 +113,6 @@ var _ = Describe("Resources", Ordered, func() {
 
 		It("should be available", func() {
 			expectClusterOperatorAvailable(ctx)
-		})
-
-		It("When the ClusterOperator is available, it should expose the operator info metric", func() {
-			expectClusterOperatorAvailable(ctx)
-
-			Eventually(func(g Gomega) {
-				families, pod, err := scrapeOperatorMetrics(ctx)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(families).To(HaveKey(controllers.OperatorInfoMetricName))
-
-				var image string
-				for _, status := range pod.Status.ContainerStatuses {
-					if status.Name == controllers.OperatorContainerName {
-						image = status.Image
-						break
-					}
-				}
-				g.Expect(image).NotTo(BeEmpty(), "operator container status image should be available")
-
-				metrics := families[controllers.OperatorInfoMetricName].GetMetric()
-				g.Expect(metrics).NotTo(BeEmpty())
-				for _, metric := range metrics {
-					g.Expect(metric.GetGauge().GetValue()).To(Equal(float64(1)))
-
-					labels := make(map[string]string)
-					for _, label := range metric.GetLabel() {
-						labels[label.GetName()] = label.GetValue()
-					}
-					g.Expect(labels).To(HaveKeyWithValue("image", image))
-					g.Expect(labels).To(HaveKeyWithValue("go_version", Not(BeEmpty())))
-					g.Expect(labels).To(HaveKeyWithValue("go_arch", Not(BeEmpty())))
-				}
-			}, pollOneMinute, pollFiveSecond).Should(Succeed())
 		})
 	})
 
@@ -248,6 +224,95 @@ var _ = Describe("Resources", Ordered, func() {
 		})
 	})
 
+	Context("metrics", func() {
+		BeforeEach(func() {
+			if env.IsManagementCluster() {
+				Skip("the secured operator metrics endpoint is only configured in standalone mode")
+			}
+		})
+
+		It("When Prometheus discovers the operator, it should scrape metrics successfully over HTTPS", func() {
+			Eventually(func() error {
+				return checkPrometheusOperatorTarget(ctx)
+			}, 5*time.Minute, pollFiveSecond).Should(Succeed())
+		})
+
+		It("When a client uses HTTP, it should reject the metrics scrape", func() {
+			Eventually(func(g Gomega) {
+				_, status, _, err := requestOperatorMetrics(ctx, "http", "")
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(status).To(Equal(http.StatusBadRequest))
+			}, pollOneMinute, pollFiveSecond).Should(Succeed())
+		})
+
+		It("When no token is provided, it should reject the metrics scrape", func() {
+			Eventually(func(g Gomega) {
+				_, status, _, err := requestOperatorMetrics(ctx, "https", "")
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(status).To(Equal(http.StatusUnauthorized))
+			}, pollOneMinute, pollFiveSecond).Should(Succeed())
+		})
+
+		It("When an authenticated client lacks metrics permission, it should reject the scrape", func() {
+			serviceAccount, err := coreClient.ServiceAccounts(operatorNamespace).Create(ctx, &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{GenerateName: "metrics-unprivileged-"},
+			}, metav1.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(func() error {
+				return coreClient.ServiceAccounts(operatorNamespace).Delete(context.Background(), serviceAccount.Name, metav1.DeleteOptions{})
+			})
+			unprivilegedToken, err := coreClient.ServiceAccounts(operatorNamespace).CreateToken(ctx, serviceAccount.Name,
+				&authenticationv1.TokenRequest{}, metav1.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(func(g Gomega) {
+				_, status, _, err := requestOperatorMetrics(ctx, "https", unprivilegedToken.Status.Token)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(status).To(Equal(http.StatusForbidden))
+			}, pollOneMinute, pollFiveSecond).Should(Succeed())
+		})
+
+		It("When Prometheus is authorized, it should expose the operator info metric", func() {
+			token, err := coreClient.ServiceAccounts("openshift-monitoring").CreateToken(ctx, "prometheus-k8s",
+				&authenticationv1.TokenRequest{}, metav1.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(func(g Gomega) {
+				body, status, pod, err := requestOperatorMetrics(ctx, "https", token.Status.Token)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(status).To(Equal(http.StatusOK))
+
+				parser := expfmt.NewTextParser(model.UTF8Validation)
+				families, err := parser.TextToMetricFamilies(bytes.NewReader(body))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(families).To(HaveKey(controllers.OperatorInfoMetricName))
+
+				var image string
+				for _, status := range pod.Status.ContainerStatuses {
+					if status.Name == controllers.OperatorContainerName {
+						image = status.Image
+						break
+					}
+				}
+				g.Expect(image).NotTo(BeEmpty(), "operator container status image should be available")
+
+				metrics := families[controllers.OperatorInfoMetricName].GetMetric()
+				g.Expect(metrics).NotTo(BeEmpty())
+				for _, metric := range metrics {
+					g.Expect(metric.GetGauge().GetValue()).To(Equal(float64(1)))
+
+					labels := make(map[string]string)
+					for _, label := range metric.GetLabel() {
+						labels[label.GetName()] = label.GetValue()
+					}
+					g.Expect(labels).To(HaveKeyWithValue("image", image))
+					g.Expect(labels).To(HaveKeyWithValue("go_version", Not(BeEmpty())))
+					g.Expect(labels).To(HaveKeyWithValue("go_arch", Not(BeEmpty())))
+				}
+			}, pollOneMinute, pollFiveSecond).Should(Succeed())
+		})
+	})
+
 	// --- Teardown ---
 
 	It("should clean up owned resources on CR deletion", func() {
@@ -276,7 +341,7 @@ var _ = Describe("Resources", Ordered, func() {
 	})
 })
 
-func scrapeOperatorMetrics(ctx context.Context) (map[string]*dto.MetricFamily, *corev1.Pod, error) {
+func requestOperatorMetrics(ctx context.Context, scheme, token string) ([]byte, int, *corev1.Pod, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -285,15 +350,15 @@ func scrapeOperatorMetrics(ctx context.Context) (map[string]*dto.MetricFamily, *
 		Name:      operatorDeploymentName,
 		Namespace: operatorNamespace,
 	}, dep); err != nil {
-		return nil, nil, fmt.Errorf("get operator deployment: %w", err)
+		return nil, 0, nil, fmt.Errorf("get operator deployment: %w", err)
 	}
 	selector, err := metav1.LabelSelectorAsSelector(dep.Spec.Selector)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read operator pod selector: %w", err)
+		return nil, 0, nil, fmt.Errorf("read operator pod selector: %w", err)
 	}
 	pods := &corev1.PodList{}
 	if err := env.Client.List(ctx, pods, client.InNamespace(operatorNamespace), client.MatchingLabelsSelector{Selector: selector}); err != nil {
-		return nil, nil, fmt.Errorf("list operator pods: %w", err)
+		return nil, 0, nil, fmt.Errorf("list operator pods: %w", err)
 	}
 
 	for _, pod := range pods.Items {
@@ -303,18 +368,13 @@ func scrapeOperatorMetrics(ctx context.Context) (map[string]*dto.MetricFamily, *
 			continue
 		}
 
-		body, err := coreClient.Pods(operatorNamespace).ProxyGet("http", pod.Name, "8080", "metrics", nil).DoRaw(ctx)
+		body, status, err := requestOperatorPodMetrics(ctx, pod.Name, scheme, token)
 		if err != nil {
-			return nil, nil, fmt.Errorf("scrape operator pod %s/%s: %w", operatorNamespace, pod.Name, err)
+			return nil, 0, nil, fmt.Errorf("scrape operator pod %s/%s: %w", operatorNamespace, pod.Name, err)
 		}
-		parser := expfmt.NewTextParser(model.UTF8Validation)
-		families, err := parser.TextToMetricFamilies(bytes.NewReader(body))
-		if err != nil {
-			return nil, nil, fmt.Errorf("parse metrics from operator pod %s/%s: %w", operatorNamespace, pod.Name, err)
-		}
-		return families, &pod, nil
+		return body, status, &pod, nil
 	}
-	return nil, nil, fmt.Errorf("no ready operator pod found in namespace %s", operatorNamespace)
+	return nil, 0, nil, fmt.Errorf("no ready operator pod found in namespace %s", operatorNamespace)
 }
 
 func expectClusterOperatorAvailable(ctx context.Context) {
@@ -370,6 +430,154 @@ func providerCRDs() []*apiextensionsv1.CustomResourceDefinition {
 		return (&cloudaws.Provider{}).CRDs()
 	case configv1.AzurePlatformType:
 		return (&cloudazure.Provider{}).CRDs()
+	}
+	return nil
+}
+
+// requestOperatorPodMetrics fetches /metrics from podName in operatorNamespace
+// over a port-forward. scheme selects HTTP or HTTPS. HTTPS verifies TLS with the
+// service CA and Service DNS name. Redirects are not followed.
+// ctx controls the API calls, HTTP request, and port-forward lifetime.
+// token is a bearer token. An empty token sends an anonymous request.
+//
+// It returns the raw response body, HTTP status code, and any setup, transport,
+// or response-read error. Non-2xx status codes do not themselves cause an error.
+//
+// The API server's pod proxy is not used because it does not forward the caller's
+// bearer token or verify the metrics serving certificate.
+func requestOperatorPodMetrics(ctx context.Context, podName, scheme, token string) ([]byte, int, error) {
+	port, err := forwardMetricsPort(ctx, operatorNamespace, podName, 8080)
+	if err != nil {
+		return nil, 0, err
+	}
+	transport := &http.Transport{}
+	defer transport.CloseIdleConnections()
+	if scheme == "https" {
+		ca := &corev1.ConfigMap{}
+		if err := env.Client.Get(ctx, types.NamespacedName{
+			Namespace: "openshift-monitoring", Name: "serving-certs-ca-bundle",
+		}, ca); err != nil {
+			return nil, 0, err
+		}
+		roots := x509.NewCertPool()
+		if !roots.AppendCertsFromPEM([]byte(ca.Data["service-ca.crt"])) {
+			return nil, 0, fmt.Errorf("metrics service CA bundle is empty or invalid")
+		}
+		transport.TLSClientConfig = &tls.Config{
+			RootCAs: roots, ServerName: "karpenter-operator.openshift-karpenter.svc", MinVersion: tls.VersionTLS12,
+		}
+	}
+	httpClient := &http.Client{
+		Transport: transport,
+		Timeout:   5 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	endpoint := fmt.Sprintf("%s://127.0.0.1:%d/metrics", scheme, port)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	return body, resp.StatusCode, err
+}
+
+func forwardMetricsPort(ctx context.Context, namespace, podName string, remotePort uint16) (uint16, error) {
+	cfg, err := ctrl.GetConfig()
+	if err != nil {
+		return 0, err
+	}
+	roundTripper, upgrader, err := spdy.RoundTripperFor(cfg)
+	if err != nil {
+		return 0, err
+	}
+	url := coreClient.RESTClient().Post().Namespace(namespace).Resource("pods").
+		Name(podName).SubResource("portforward").URL()
+	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, url)
+	ready := make(chan struct{})
+	forwarder, err := portforward.NewOnAddresses(dialer, []string{"127.0.0.1"}, []string{fmt.Sprintf("0:%d", remotePort)}, ctx.Done(), ready, io.Discard, io.Discard)
+	if err != nil {
+		return 0, err
+	}
+	done := make(chan error, 1)
+	go func() { done <- forwarder.ForwardPorts() }()
+	select {
+	case <-ready:
+	case err := <-done:
+		return 0, fmt.Errorf("port-forwarding %s/%s:%d: %w", namespace, podName, remotePort, err)
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+	ports, err := forwarder.GetPorts()
+	if err != nil {
+		return 0, err
+	}
+	return ports[0].Local, nil
+}
+
+//nolint:gocyclo // Keep request errors and target failures together for scrape diagnostics.
+func checkPrometheusOperatorTarget(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Prometheus listens on loopback. Inspect its scrape results through a pod
+	// port-forward rather than depending on an externally accessible route.
+	port, err := forwardMetricsPort(ctx, "openshift-monitoring", "prometheus-k8s-0", 9090)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		fmt.Sprintf("http://127.0.0.1:%d/api/v1/targets?state=active", port), nil)
+	if err != nil {
+		return err
+	}
+	req.Close = true
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Prometheus targets status = %d, want 200", resp.StatusCode)
+	}
+	var result struct {
+		Status string `json:"status"`
+		Data   struct {
+			ActiveTargets []struct {
+				Labels    map[string]string `json:"labels"`
+				Health    string            `json:"health"`
+				ScrapeURL string            `json:"scrapeUrl"`
+				LastError string            `json:"lastError"`
+			} `json:"activeTargets"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("decoding Prometheus targets: %w", err)
+	}
+	if result.Status != "success" {
+		return fmt.Errorf("Prometheus targets response status = %q, want success", result.Status)
+	}
+	found := false
+	for _, target := range result.Data.ActiveTargets {
+		if target.Labels["namespace"] != operatorNamespace || target.Labels["service"] != operatorDeploymentName {
+			continue
+		}
+		found = true
+		if !strings.HasPrefix(target.ScrapeURL, "https://") || target.Health != "up" || target.LastError != "" {
+			return fmt.Errorf("operator target %s: health=%q, last error=%q", target.ScrapeURL, target.Health, target.LastError)
+		}
+	}
+	if !found {
+		return fmt.Errorf("Prometheus has no active target for %s/%s", operatorNamespace, operatorDeploymentName)
 	}
 	return nil
 }

@@ -84,8 +84,10 @@ type Options struct {
 	DefaultSecurityContextUID *int64
 
 	MetricsAddr string
-	ProbeAddr   string
-	LeaderElect bool
+	// MetricsCertDir enables authenticated HTTPS metrics using tls.crt and tls.key.
+	MetricsCertDir string
+	ProbeAddr      string
+	LeaderElect    bool
 }
 
 // LoadEnv populates fields that are sourced exclusively from environment variables.

@@ -21,6 +21,7 @@ func main() {
 
 	flag.StringVar(&opts.Namespace, "namespace", "", "The namespace to deploy karpenter into")
 	flag.StringVar(&opts.MetricsAddr, "metrics-bind-address", ":8080", "The address the metrics endpoint binds to")
+	flag.StringVar(&opts.MetricsCertDir, "metrics-cert-dir", "", "Directory containing tls.crt and tls.key to enable HTTPS metrics with token authentication and authorization")
 	flag.StringVar(&opts.ProbeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to")
 	flag.BoolVar(&opts.LeaderElect, "leader-elect", false, "Enable leader election for controller manager")
 	flag.StringVar(&opts.TargetKubeconfig, "target-kubeconfig", "", "Path to the target cluster kubeconfig where Karpenter manages resources")
