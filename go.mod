@@ -118,7 +118,7 @@ require (
 
 replace github.com/aws/karpenter-provider-aws => github.com/openshift/aws-karpenter-provider-aws v0.0.0-20261013185003-aa136f7fdc38
 
-replace github.com/Azure/karpenter-provider-azure => github.com/openshift/Azure-karpenter-provider-azure v0.0.0-20261026235616-bc70c7241ed3
+replace github.com/Azure/karpenter-provider-azure => github.com/LucasAndFlores/Azure-karpenter-provider-azure v0.0.0-20261119125639-f578a3846dc9
 
 replace sigs.k8s.io/karpenter => github.com/openshift/kubernetes-sigs-karpenter v0.0.0-20261021200634-6d0051169286
 
