@@ -39,6 +39,9 @@ const (
 	userData421             = `{"ignition":{"config":{"merge":[{"source":"https://ignition-server.clusters-example.svc/ignition","httpHeaders":[{"name":"Authorization","value":"Bearer ZDJmNGE3YjE="},{"name":"NodePool","value":"clusters-example/default-karpenter"},{"name":"TargetConfigVersionHash","value":"3f1c9a2b"}]}]},"version":"3.2.0"}}`
 	userData421RotatedToken = `{"ignition":{"config":{"merge":[{"source":"https://ignition-server.clusters-example.svc/ignition","httpHeaders":[{"name":"Authorization","value":"Bearer YTdjOTJlNGI="},{"name":"NodePool","value":"clusters-example/default-karpenter"},{"name":"TargetConfigVersionHash","value":"3f1c9a2b"}]}]},"version":"3.2.0"}}`
 	userData422             = `{"ignition":{"config":{"merge":[{"source":"https://ignition-server.clusters-example.svc/ignition","httpHeaders":[{"name":"Authorization","value":"Bearer OWMzZTgxMGE="},{"name":"NodePool","value":"clusters-example/default-karpenter"},{"name":"TargetConfigVersionHash","value":"7d0e4c6f"}]}]},"version":"3.2.0"}}`
+
+	marketplaceImageURN421 = "azureopenshift:aro4:aro_421:9.6.20251015"
+	marketplaceImageURN422 = "azureopenshift:aro4:aro_422:9.6.20260212"
 )
 
 var (
@@ -207,40 +210,40 @@ func TestNodeClassControllerReconcileSpecChanges(t *testing.T) {
 
 func TestNodeClassControllerReconcileUserDataSecret(t *testing.T) {
 	tests := map[string]struct {
-		aksNodeClass         *azurekarpenterv1beta1.AKSNodeClass
-		hcp                  *hyperv1beta1.HostedControlPlane
-		userDataSecret       *corev1.Secret
-		version              string
-		wantMarketplaceImage *azurekarpenterv1beta1.MarketplaceImage
-		wantUserData         *string
+		aksNodeClass          *azurekarpenterv1beta1.AKSNodeClass
+		hcp                   *hyperv1beta1.HostedControlPlane
+		userDataSecret        *corev1.Secret
+		version               string
+		wantMarketplaceImages []string
+		wantUserData          *string
 	}{
 		"When the control plane upgrade has completed, it should apply the user data Secret": {
-			aksNodeClass:         newAKSNodeClass(userData421, marketplaceImage421),
-			hcp:                  upgradedHCP(),
-			userDataSecret:       newUserDataSecret(userData422, marketplaceImage422),
-			wantMarketplaceImage: marketplaceImage422,
-			wantUserData:         new(userData422),
+			aksNodeClass:          newAKSNodeClass(userData421, []string{marketplaceImageURN421}),
+			hcp:                   upgradedHCP(),
+			userDataSecret:        newUserDataSecret(userData422, marketplaceImage422),
+			wantMarketplaceImages: []string{marketplaceImageURN422},
+			wantUserData:          new(userData422),
 		},
 		"When the control plane is upgrading and the NodeClass has no version, it should keep the current userData and image": {
-			aksNodeClass:         newAKSNodeClass(userData421, marketplaceImage421),
-			hcp:                  upgradingHCP(),
-			userDataSecret:       newUserDataSecret(userData422, marketplaceImage422),
-			wantMarketplaceImage: marketplaceImage421,
-			wantUserData:         new(userData421),
+			aksNodeClass:          newAKSNodeClass(userData421, []string{marketplaceImageURN421}),
+			hcp:                   upgradingHCP(),
+			userDataSecret:        newUserDataSecret(userData422, marketplaceImage422),
+			wantMarketplaceImages: []string{marketplaceImageURN421},
+			wantUserData:          new(userData421),
 		},
 		"When the control plane is upgrading and the AKSNodeClass is new, it should apply the user data Secret": {
-			hcp:                  upgradingHCP(),
-			userDataSecret:       newUserDataSecret(userData421, marketplaceImage421),
-			wantMarketplaceImage: marketplaceImage421,
-			wantUserData:         new(userData421),
+			hcp:                   upgradingHCP(),
+			userDataSecret:        newUserDataSecret(userData421, marketplaceImage421),
+			wantMarketplaceImages: []string{marketplaceImageURN421},
+			wantUserData:          new(userData421),
 		},
 		"When the control plane is upgrading and the NodeClass has a version, it should apply the user data Secret": {
-			aksNodeClass:         newAKSNodeClass(userData421, marketplaceImage421),
-			hcp:                  upgradingHCP(),
-			userDataSecret:       newUserDataSecret(userData421RotatedToken, marketplaceImage421),
-			version:              "4.21.10",
-			wantMarketplaceImage: marketplaceImage421,
-			wantUserData:         new(userData421RotatedToken),
+			aksNodeClass:          newAKSNodeClass(userData421, []string{marketplaceImageURN421}),
+			hcp:                   upgradingHCP(),
+			userDataSecret:        newUserDataSecret(userData421RotatedToken, marketplaceImage421),
+			version:               "4.21.10",
+			wantMarketplaceImages: []string{marketplaceImageURN421},
+			wantUserData:          new(userData421RotatedToken),
 		},
 	}
 
@@ -266,7 +269,7 @@ func TestNodeClassControllerReconcileUserDataSecret(t *testing.T) {
 
 			aksNodeClass := getAKSNodeClass(t, hostedClient)
 			g.Expect(aksNodeClass.Spec.UserData).To(Equal(tc.wantUserData))
-			g.Expect(aksNodeClass.Spec.MarketplaceImage).To(Equal(tc.wantMarketplaceImage))
+			g.Expect(aksNodeClass.Spec.MarketplaceImages).To(Equal(tc.wantMarketplaceImages))
 			// The hold only covers userData and image; the other fields still follow the OpenShiftAzureNodeClass.
 			g.Expect(aksNodeClass.Spec.OSDiskSizeGB).To(Equal(new(int32(256))))
 		})
@@ -290,7 +293,7 @@ func TestNodeClassControllerReconcileWithoutManagementObjects(t *testing.T) {
 			g := NewWithT(t)
 			hostedClient := fake.NewClientBuilder().
 				WithScheme(nodeClassTestScheme()).
-				WithObjects(newNodeClass(), newAKSNodeClass(userData421, marketplaceImage421)).
+				WithObjects(newNodeClass(), newAKSNodeClass(userData421, []string{marketplaceImageURN421})).
 				WithStatusSubresource(&openshiftkarpenterv1alpha1.OpenShiftAzureNodeClass{}, &azurekarpenterv1beta1.AKSNodeClass{}).
 				Build()
 			c := newTestController(hostedClient, tc.objects...)
@@ -376,12 +379,12 @@ func newNodeClass() *openshiftkarpenterv1alpha1.OpenShiftAzureNodeClass {
 	}
 }
 
-func newAKSNodeClass(userData string, marketplaceImage *azurekarpenterv1beta1.MarketplaceImage) *azurekarpenterv1beta1.AKSNodeClass {
+func newAKSNodeClass(userData string, marketplaceImages []string) *azurekarpenterv1beta1.AKSNodeClass {
 	return &azurekarpenterv1beta1.AKSNodeClass{
 		ObjectMeta: metav1.ObjectMeta{Name: nodeClassName},
 		Spec: azurekarpenterv1beta1.AKSNodeClassSpec{
-			UserData:         new(userData),
-			MarketplaceImage: marketplaceImage,
+			UserData:          new(userData),
+			MarketplaceImages: marketplaceImages,
 		},
 	}
 }

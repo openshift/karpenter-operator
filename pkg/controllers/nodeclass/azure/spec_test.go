@@ -91,6 +91,52 @@ func TestAKSNodeClassSpec(t *testing.T) {
 	}
 }
 
+func TestReconcileAKSNodeClassReleaseMarketplaceImages(t *testing.T) {
+	tests := map[string]struct {
+		onlyARM64  bool
+		wantImages []string
+		wantError  string
+	}{
+		"When amd64 and arm64 marketplace annotations exist, it should use only amd64": {
+			wantImages: []string{"azureopenshift:aro4:aro_421:9.6.20251015"},
+		},
+		"When only arm64 marketplace annotations exist, it should reject the missing amd64 publisher": {
+			onlyARM64: true,
+			wantError: "hypershift.openshift.io/azure-marketplace-publisher",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			g := NewWithT(t)
+			secret := newUserDataSecret(userData421, marketplaceImage421)
+			secret.Annotations["hypershift.openshift.io/azure-marketplace-publisher-arm64"] = "azureopenshift"
+			secret.Annotations["hypershift.openshift.io/azure-marketplace-offer-arm64"] = "aro4"
+			secret.Annotations["hypershift.openshift.io/azure-marketplace-sku-arm64"] = "aro_421-arm"
+			secret.Annotations["hypershift.openshift.io/azure-marketplace-version-arm64"] = "9.6.20251016"
+			if tc.onlyARM64 {
+				for _, annotation := range []string{
+					marketplacePublisherAnnotation,
+					marketplaceOfferAnnotation,
+					marketplaceSKUAnnotation,
+					marketplaceVersionAnnotation,
+				} {
+					delete(secret.Annotations, annotation)
+				}
+			}
+
+			desired := azurekarpenterv1beta1.AKSNodeClassSpec{}
+			err := reconcileAKSNodeClassRelease(&desired, azurekarpenterv1beta1.AKSNodeClassSpec{}, newNodeClass(), stableHCP(), secret)
+			if tc.wantError != "" {
+				g.Expect(err).To(MatchError(ContainSubstring(tc.wantError)))
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(desired.MarketplaceImages).To(Equal(tc.wantImages))
+		})
+	}
+}
+
 func TestReconcileAKSNodeClassReleaseInvalidMarketplaceAnnotations(t *testing.T) {
 	tests := map[string]struct {
 		annotation string
@@ -153,6 +199,7 @@ func TestReconcileAKSNodeClassReleaseInvalidMarketplaceAnnotations(t *testing.T)
 }
 
 func TestReconcileAKSNodeClassReleaseUpgradePreservation(t *testing.T) {
+	marketplaceImages421 := []string{"azureopenshift:aro4:aro_421:9.6.20251015"}
 	tests := map[string]struct {
 		current   azurekarpenterv1beta1.AKSNodeClassSpec
 		hcp       *hyperv1beta1.HostedControlPlane
@@ -160,12 +207,12 @@ func TestReconcileAKSNodeClassReleaseUpgradePreservation(t *testing.T) {
 		wantError bool
 	}{
 		"When an unpinned NodeClass is waiting for an upgrade, it should preserve its release without validating unused image annotations": {
-			current:   newAKSNodeClass(userData421, marketplaceImage421).Spec,
+			current:   newAKSNodeClass(userData421, marketplaceImages421).Spec,
 			hcp:       upgradingHCP(),
 			wantError: false,
 		},
 		"When the control plane upgrade has completed, it should reject missing image annotations": {
-			current:   newAKSNodeClass(userData421, marketplaceImage421).Spec,
+			current:   newAKSNodeClass(userData421, marketplaceImages421).Spec,
 			hcp:       upgradedHCP(),
 			wantError: true,
 		},
@@ -174,17 +221,17 @@ func TestReconcileAKSNodeClassReleaseUpgradePreservation(t *testing.T) {
 			wantError: true,
 		},
 		"When the NodeClass has a pinned version during an upgrade, it should reject missing image annotations": {
-			current:   newAKSNodeClass(userData421, marketplaceImage421).Spec,
+			current:   newAKSNodeClass(userData421, marketplaceImages421).Spec,
 			hcp:       upgradingHCP(),
 			version:   "4.21.10",
 			wantError: true,
 		},
 		"When the current user data is unset during an upgrade, it should reject missing image annotations": {
-			current:   azurekarpenterv1beta1.AKSNodeClassSpec{MarketplaceImage: marketplaceImage421},
+			current:   azurekarpenterv1beta1.AKSNodeClassSpec{MarketplaceImages: marketplaceImages421},
 			hcp:       upgradingHCP(),
 			wantError: true,
 		},
-		"When the current marketplace image is unset during an upgrade, it should reject missing image annotations": {
+		"When the current marketplace images are unset during an upgrade, it should reject missing image annotations": {
 			current:   azurekarpenterv1beta1.AKSNodeClassSpec{UserData: new(userData421)},
 			hcp:       upgradingHCP(),
 			wantError: true,
@@ -207,7 +254,7 @@ func TestReconcileAKSNodeClassReleaseUpgradePreservation(t *testing.T) {
 			}
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(got.UserData).To(Equal(new(userData421)))
-			g.Expect(got.MarketplaceImage).To(Equal(marketplaceImage421))
+			g.Expect(got.MarketplaceImages).To(Equal(marketplaceImages421))
 			g.Expect(got.OSDiskSizeGB).To(Equal(new(int32(256))))
 		})
 	}

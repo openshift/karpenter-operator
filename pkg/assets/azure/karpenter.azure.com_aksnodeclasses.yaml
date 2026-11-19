@@ -2289,34 +2289,21 @@ spec:
                 - mode
                 - vnetDNSOverrides
                 type: object
-              marketplaceImage:
+              marketplaceImages:
                 description: |-
-                  marketplaceImage selects an Azure Marketplace platform image by publisher/offer/sku/version.
-                  For OpenShift mode, use this for ARO RHCOS images (e.g. azureopenshift/aro4/aro_422-v2/...).
-                properties:
-                  offer:
-                    description: offer is the product line of the image.
-                    minLength: 1
-                    type: string
-                  publisher:
-                    description: publisher is the name of the organization that published
-                      the image.
-                    minLength: 1
-                    type: string
-                  sku:
-                    description: sku is the specific image flavor.
-                    minLength: 1
-                    type: string
-                  version:
-                    description: version is the image build version.
-                    minLength: 1
-                    type: string
-                required:
-                - offer
-                - publisher
-                - sku
-                - version
-                type: object
+                  marketplaceImages selects Azure Marketplace platform images by Publisher:Offer:Sku:Version URN.
+                  Each image must resolve to a distinct architecture.
+                  The version must be explicit; latest is not supported.
+                items:
+                  pattern: ^[A-Za-z0-9._-]+(:[A-Za-z0-9._-]+){3}$
+                  type: string
+                minItems: 1
+                type: array
+                x-kubernetes-list-type: atomic
+                x-kubernetes-validations:
+                - message: marketplaceImages must specify an explicit version; latest
+                    is not supported
+                  rule: self.all(image, !image.endsWith(':latest'))
               maxPods:
                 description: |-
                   maxPods is an override for the maximum number of pods that can run on a worker node instance.
