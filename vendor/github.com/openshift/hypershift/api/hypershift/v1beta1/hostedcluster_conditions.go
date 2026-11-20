@@ -187,10 +187,30 @@ const (
 	// there are still pending cloud resources to be deleted that are using that SG.
 	AWSDefaultSecurityGroupDeleted ConditionType = "AWSDefaultSecurityGroupDeleted"
 
+	// GCPFirewallRulesReady indicates whether the control-plane-operator has
+	// reconciled the managed GCP worker firewall rule (<infra-id>-internal-cluster)
+	// to its desired state.
+	// This reconcile is best-effort: expected, recoverable states such as missing
+	// Workload Identity Federation credentials, insufficient IAM permissions (the
+	// ctrlplane-op service account is missing roles/compute.securityAdmin), an
+	// unresolvable project/VPC, or an ownership conflict set this condition to
+	// False with an actionable message but do not fail the overall HCP reconcile.
+	// The next periodic reconcile converges automatically once the underlying
+	// condition clears.
+	GCPFirewallRulesReady ConditionType = "GCPFirewallRulesReady"
+
 	// PlatformCredentialsFound indicates that credentials required for the
 	// desired platform are valid.
 	// A failure here is unlikely to resolve without the changing user input.
 	PlatformCredentialsFound ConditionType = "PlatformCredentialsFound"
+
+	// IngressCredentialsFound indicates whether the optional ingress-operator
+	// credentials are configured. It is only evaluated for platforms whose
+	// ingress operator needs cloud credentials (today: GCP). A False condition
+	// is non-blocking: the HostedCluster keeps reconciling, but the guest
+	// ingress operator runs without cloud credentials and cannot publish the
+	// *.apps DNS records.
+	IngressCredentialsFound ConditionType = "IngressCredentialsFound"
 
 	// ReconciliationActive indicates if reconciliation of the HostedCluster is
 	// active or paused hostedCluster.spec.pausedUntil.
@@ -300,12 +320,33 @@ const (
 	PublicEndpointSharedIngressConfiguredReason = "SharedIngressConfigured"
 	PublicEndpointTopologyPrivateReason         = "TopologyPrivate"
 	PublicEndpointConvergenceInProgressReason   = "ConvergenceInProgress"
+)
+
+// AWSManagedDNSAvailable indicates whether the managed DNS configuration
+// has been successfully created for the hosted cluster. This condition is
+// only set when spec.platform.aws.managedDNS is configured.
+const AWSManagedDNSAvailable ConditionType = "AWSManagedDNSAvailable"
+
+const (
+	AWSManagedDNSSuccessReason = "ManagedDNSSuccess"
+	AWSManagedDNSErrorReason   = "ManagedDNSError"
+	AWSManagedDNSPendingReason = "NSDelegationPending"
 	// EtcdDataEncryptionUpToDate indicates whether all etcd data is encrypted with the
 	// currently active encryption key.
 	// True: all data confirmed encrypted with the active key.
 	// False: re-encryption is in progress or has failed.
 	// Absent: encryption is not configured.
 	EtcdDataEncryptionUpToDate ConditionType = "EtcdDataEncryptionUpToDate"
+
+	// DeterministicLBIPSupported indicates whether the HostedCluster's
+	// deterministic load balancer configuration (loadBalancer.serviceAnnotations
+	// and loadBalancer.loadBalancerClass on the APIServer service) is honored by
+	// the control plane operator image in use.
+	// A False condition means the HostedCluster asks for annotations or an LB
+	// class that the control plane operator image predates, so the fields are
+	// ignored. Upgrading the control plane release image resolves it; the
+	// HostedCluster keeps reconciling in the meantime.
+	DeterministicLBIPSupported ConditionType = "DeterministicLBIPSupported"
 )
 
 // Reasons.
@@ -323,6 +364,10 @@ const (
 	SecretNotFoundReason               = "SecretNotFound"
 	WaitingForGracePeriodReason        = "WaitingForGracePeriod"
 	BlockedReason                      = "Blocked"
+	// UnsupportedControlPlaneOperatorReason is used with the
+	// DeterministicLBIPSupported condition when the control plane operator image
+	// does not implement a feature the HostedCluster has configured.
+	UnsupportedControlPlaneOperatorReason = "UnsupportedControlPlaneOperator"
 
 	InfraStatusFailureReason           = "InfraStatusFailure"
 	WaitingOnInfrastructureReadyReason = "WaitingOnInfrastructureReady"
@@ -344,6 +389,7 @@ const (
 	OIDCConfigurationInvalidReason        = "OIDCConfigurationInvalid"
 	ProxyCABundleInvalidReason            = "ProxyCABundleInvalid"
 	PlatformCredentialsNotFoundReason     = "PlatformCredentialsNotFound"
+	IngressServiceAccountNotFoundReason   = "IngressServiceAccountNotFound"
 	InvalidImageReason                    = "InvalidImage"
 	InvalidIdentityProvider               = "InvalidIdentityProvider"
 	PayloadArchNotFoundReason             = "PayloadArchNotFound"
@@ -406,6 +452,30 @@ const (
 	AutoNodeNotConfiguredReason    = "AutoNodeNotConfigured"
 	AutoNodeProgressingReason      = "AutoNodeProgressing"
 	AutoNodeEvaluationFailedReason = "AutoNodeEvaluationFailed"
+
+	// Reasons for the GCPFirewallRulesReady condition.
+	// GCPFirewallInsufficientPermissions is set when the GCP API returns a 403,
+	// typically because the ctrlplane-op service account has not been granted
+	// roles/compute.securityAdmin. This is the primary existing-cluster case and
+	// is recoverable by re-running the IAM setup.
+	GCPFirewallInsufficientPermissions = "GCPFirewallInsufficientPermissions"
+	// GCPFirewallWaitingForCredentials is set when the Workload Identity Federation
+	// token is not yet available, so the Compute client cannot be built.
+	GCPFirewallWaitingForCredentials = "GCPFirewallWaitingForCredentials"
+	// GCPFirewallWaitingForInfra is set when the HCP's GCP project or VPC cannot
+	// yet be resolved.
+	GCPFirewallWaitingForInfra = "GCPFirewallWaitingForInfra"
+	// GCPFirewallOwnershipConflict is set when a same-named firewall rule exists
+	// but is not owned by (or is incompatible with) the control-plane-operator, so
+	// it is left untouched.
+	GCPFirewallOwnershipConflict = "GCPFirewallOwnershipConflict"
+	// GCPFirewallInvalidConfiguration is set when the derived firewall request is
+	// rejected for a reason that cannot succeed on retry (e.g. an infra ID that
+	// yields a firewall name over GCP's 63-character RFC1035 limit, or an
+	// otherwise malformed request). It requires a configuration or code change,
+	// not a retry, so it is reported as a terminal, actionable state rather than
+	// being masked as waiting for infrastructure.
+	GCPFirewallInvalidConfiguration = "GCPFirewallInvalidConfiguration"
 
 	ReadOnlyRolloutInProgressReason = "ReadOnlyRolloutInProgress"
 	WritePromotionInProgressReason  = "WritePromotionInProgress"

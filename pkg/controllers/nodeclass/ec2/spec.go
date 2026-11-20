@@ -2,9 +2,9 @@ package ec2nodeclass
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
 	"github.com/openshift/karpenter-operator/pkg/hypershift"
@@ -15,9 +15,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+
+	"github.com/samber/lo"
 )
 
 // defaultRootVolumeSize is 120Gi because HCP NodePools provisioned with HCP CLI are set with 120Gi root volume by default.
@@ -270,53 +271,17 @@ func volumeTypeToKarpenter(vt openshiftkarpenterv1.VolumeType) *string {
 	return &v
 }
 
-func karpenterKubeletConfigurationFromNodeClassSpec(spec openshiftkarpenterv1.OpenshiftEC2NodeClassSpec) *awskarpenterv1.KubeletConfiguration {
+func karpenterKubeletConfigurationFromNodeClassSpec(spec openshiftkarpenterv1.OpenshiftEC2NodeClassSpec) awskarpenterv1.KubeletConfiguration {
 	if !spec.Kubelet.HasTypedFields() {
 		return nil
 	}
-	return &awskarpenterv1.KubeletConfiguration{
-		ImageGCHighThresholdPercent: spec.Kubelet.ImageGCHighThresholdPercent,
-		ImageGCLowThresholdPercent:  spec.Kubelet.ImageGCLowThresholdPercent,
-		MaxPods:                     ptrIfNonZero(spec.Kubelet.MaxPods),
-		CPUCFSQuota:                 spec.Kubelet.CPUCFSQuota,
-		EvictionHard:                evictionThresholdMapToStringMap(spec.Kubelet.EvictionHard),
-		EvictionSoft:                evictionThresholdMapToStringMap(spec.Kubelet.EvictionSoft),
-		EvictionSoftGracePeriod:     evictionSoftGracePeriodToDuration(spec.Kubelet.EvictionSoftGracePeriod),
-		EvictionMaxPodGracePeriod:   spec.Kubelet.EvictionMaxPodGracePeriod,
-		PodsPerCore:                 ptrIfNonZero(spec.Kubelet.PodsPerCore),
-		SystemReserved:              spec.Kubelet.SystemReserved,
-		KubeReserved:                spec.Kubelet.KubeReserved,
-	}
-}
-
-// evictionThresholdMapToStringMap converts our EvictionThreshold map to a plain string map.
-// EvictionThreshold is a type definition (not a type alias) because controller-gen's deepcopy
-// generator doesn't handle *types.Alias (https://github.com/kubernetes-sigs/controller-tools/issues/988),
-// so we can't use `type EvictionThreshold = string` which would make this copy unnecessary.
-func evictionThresholdMapToStringMap(m map[string]openshiftkarpenterv1.EvictionThreshold) map[string]string {
-	if m == nil {
-		return nil
-	}
-	result := make(map[string]string, len(m))
-	for k, v := range m {
-		result[k] = string(v)
-	}
-	return result
-}
-
-func evictionSoftGracePeriodToDuration(m map[string]string) map[string]metav1.Duration {
-	if m == nil {
-		return nil
-	}
-	result := make(map[string]metav1.Duration, len(m))
-	for k, v := range m {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			continue
-		}
-		result[k] = metav1.Duration{Duration: d}
-	}
-	return result
+	// Bypass MarshalJSON so overflow fields remain ignition-only. The typed
+	// fields contain only JSON-compatible values, so marshaling cannot fail.
+	type typedKubeletConfiguration openshiftkarpenterv1.KubeletConfiguration
+	data := lo.Must(json.Marshal(typedKubeletConfiguration(spec.Kubelet)))
+	var config awskarpenterv1.KubeletConfiguration
+	lo.Must0(json.Unmarshal(data, &config))
+	return config
 }
 
 func ptrIfNonEmpty(s string) *string {
@@ -324,11 +289,4 @@ func ptrIfNonEmpty(s string) *string {
 		return nil
 	}
 	return &s
-}
-
-func ptrIfNonZero(v int32) *int32 {
-	if v == 0 {
-		return nil
-	}
-	return new(v)
 }
