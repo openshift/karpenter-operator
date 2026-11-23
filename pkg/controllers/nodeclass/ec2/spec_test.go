@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	"time"
 
 	. "github.com/onsi/gomega"
 
@@ -685,7 +684,7 @@ func TestEC2NodeClassSpec(t *testing.T) {
 func TestKarpenterKubeletConfigurationFromNodeClassSpec(t *testing.T) {
 	tests := map[string]struct {
 		spec     openshiftkarpenterv1.OpenshiftEC2NodeClassSpec
-		expected *awskarpenterv1.KubeletConfiguration
+		expected awskarpenterv1.KubeletConfiguration
 	}{
 		"When Kubelet is nil, it should return nil": {
 			spec:     openshiftkarpenterv1.OpenshiftEC2NodeClassSpec{},
@@ -719,30 +718,18 @@ func TestKarpenterKubeletConfigurationFromNodeClassSpec(t *testing.T) {
 					CPUCFSQuota:                 new(true),
 				},
 			},
-			expected: &awskarpenterv1.KubeletConfiguration{
-				MaxPods:     new(int32(110)),
-				PodsPerCore: new(int32(10)),
-				SystemReserved: map[string]string{
-					"cpu":    "100m",
-					"memory": "256Mi",
-				},
-				KubeReserved: map[string]string{
-					"cpu":    "200m",
-					"memory": "512Mi",
-				},
-				EvictionHard: map[string]string{
-					"memory.available": "100Mi",
-				},
-				EvictionSoft: map[string]string{
-					"memory.available": "200Mi",
-				},
-				EvictionSoftGracePeriod: map[string]metav1.Duration{
-					"memory.available": {Duration: 30 * time.Second},
-				},
-				EvictionMaxPodGracePeriod:   new(int32(60)),
-				ImageGCHighThresholdPercent: new(int32(85)),
-				ImageGCLowThresholdPercent:  new(int32(80)),
-				CPUCFSQuota:                 new(true),
+			expected: awskarpenterv1.KubeletConfiguration{
+				"maxPods":                     {Raw: []byte("110")},
+				"podsPerCore":                 {Raw: []byte("10")},
+				"systemReserved":              {Raw: []byte(`{"cpu":"100m","memory":"256Mi"}`)},
+				"kubeReserved":                {Raw: []byte(`{"cpu":"200m","memory":"512Mi"}`)},
+				"evictionHard":                {Raw: []byte(`{"memory.available":"100Mi"}`)},
+				"evictionSoft":                {Raw: []byte(`{"memory.available":"200Mi"}`)},
+				"evictionSoftGracePeriod":     {Raw: []byte(`{"memory.available":"30s"}`)},
+				"evictionMaxPodGracePeriod":   {Raw: []byte("60")},
+				"imageGCHighThresholdPercent": {Raw: []byte("85")},
+				"imageGCLowThresholdPercent":  {Raw: []byte("80")},
+				"cpuCFSQuota":                 {Raw: []byte("true")},
 			},
 		},
 		"When only some fields are set, it should map only those": {
@@ -751,8 +738,33 @@ func TestKarpenterKubeletConfigurationFromNodeClassSpec(t *testing.T) {
 					MaxPods: 50,
 				},
 			},
-			expected: &awskarpenterv1.KubeletConfiguration{
-				MaxPods: new(int32(50)),
+			expected: awskarpenterv1.KubeletConfiguration{
+				"maxPods": {Raw: []byte("50")},
+			},
+		},
+		"When typed and overflow fields are set, it should map only typed fields": {
+			spec: openshiftkarpenterv1.OpenshiftEC2NodeClassSpec{
+				Kubelet: openshiftkarpenterv1.KubeletConfiguration{
+					MaxPods:  50,
+					Overflow: runtime.RawExtension{Raw: []byte(`{"podPidsLimit":4096,"maxPods":100}`)},
+				},
+			},
+			expected: awskarpenterv1.KubeletConfiguration{
+				"maxPods": {Raw: []byte("50")},
+			},
+		},
+		"When pointer fields are explicitly zero or false, it should preserve their values": {
+			spec: openshiftkarpenterv1.OpenshiftEC2NodeClassSpec{
+				Kubelet: openshiftkarpenterv1.KubeletConfiguration{
+					CPUCFSQuota:                new(false),
+					ImageGCLowThresholdPercent: new(int32(0)),
+					EvictionMaxPodGracePeriod:  new(int32(0)),
+				},
+			},
+			expected: awskarpenterv1.KubeletConfiguration{
+				"cpuCFSQuota":                {Raw: []byte("false")},
+				"imageGCLowThresholdPercent": {Raw: []byte("0")},
+				"evictionMaxPodGracePeriod":  {Raw: []byte("0")},
 			},
 		},
 		"When only overflow fields are set, it should return nil": {

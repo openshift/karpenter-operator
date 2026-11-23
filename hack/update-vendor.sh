@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # after changing this value as part of a rebase, run this script to update deps
-release_branch="release-5.0"
+release_branch="release-5.1"
 # also update this value. You can see what's available via: go list -mod=readonly -m -versions k8s.io/api | sed 's/ /\n/g'
 # NOTE: bumping k8s out of sync with operator-sdk may break stuff, e.g. https://sdk.operatorframework.io/docs/overview/#kubernetes-version-compatibility
 # take care that we may have to update other tools in order to get operator-sdk commands working again if that happens
-kube_release="v0.36.0"
+kube_release="v0.37.2"
 # these components k8s.io/<item> are versioned for each k8s release
 kube_components="api apimachinery client-go"
 
@@ -23,6 +23,7 @@ for i in $(echo "$replaced_mods"); do
 done
 
 for i in $(echo "$all_mods" | grep '^github.com/openshift/'); do
+    [ -n "${replaced_mods[$i]+1}" ] && echo "WARN: skipping replaced package $i" && continue
     echo go get $i@$release_branch
     go get $i@$release_branch
     updated_mods["$i"]=1
@@ -44,17 +45,6 @@ for m in $all_mods; do
     updated_mods["$m"]=1
 done
 
-# replace karpenter dependencies to use openshift forks
-go mod edit -replace=github.com/aws/karpenter-provider-aws=github.com/openshift/aws-karpenter-provider-aws@main -replace sigs.k8s.io/karpenter=github.com/openshift/kubernetes-sigs-karpenter@main
-
-echo
-echo go mod tidy
-go mod tidy
-
-echo
-echo go mod vendor
-go mod vendor
-
-echo 
-echo go mod verify
-go mod verify
+# Bump all OpenShift forks using the branches configured in the Makefile,
+# re-vendor, and sync operand CRDs and RBAC.
+make bump-forks
