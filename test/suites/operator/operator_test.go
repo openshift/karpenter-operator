@@ -524,7 +524,6 @@ func forwardMetricsPort(ctx context.Context, namespace, podName string, remotePo
 	return ports[0].Local, nil
 }
 
-//nolint:gocyclo // Keep request errors and target failures together for scrape diagnostics.
 func checkPrometheusOperatorTarget(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()

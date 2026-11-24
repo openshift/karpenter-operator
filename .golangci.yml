@@ -71,6 +71,7 @@ linters:
       - path: (.+)\.go$
         text: declaration of "(err|ctx)" shadows declaration at
       - linters:
+          - gocyclo
           - unparam
         path: '_test\.go$'
       - linters:
