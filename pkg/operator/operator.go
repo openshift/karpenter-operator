@@ -82,7 +82,11 @@ func Run(ctx context.Context, opts Options) error {
 
 	if !isPlatformSupported(opts.ManagementCluster, infra.PlatformType) {
 		setupLog.Info("Platform is not supported, only reporting ClusterOperator status", "platform", infra.PlatformType)
-		return runClusterOperatorReporter(ctx, restCfg, opts, infra.PlatformType)
+		mgr, err := newManager(restCfg, opts)
+		if err != nil {
+			return err
+		}
+		return runClusterOperatorReporter(ctx, mgr, opts, infra.PlatformType)
 	}
 
 	provider, err := cloudprovider.GetCloudProvider(ctx, infra)
@@ -131,9 +135,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err := controllers.Setup(mgr, controllers.NewControllers(mgr, cfg)...); err != nil {
 		return err
 	}
-	go controllers.SetupOperatorInfoMetricWithRetry(ctx, mgr.GetAPIReader(), opts.Namespace)
-
-	return startManager(ctx, mgr)
+	return startManager(ctx, mgr, opts.Namespace)
 }
 
 func discoverInfrastructureFromEnv(opts Options) common.InfrastructureInfo {
@@ -184,12 +186,7 @@ func isPlatformSupported(managementCluster bool, platform configv1.PlatformType)
 
 // runClusterOperatorReporter runs only the ClusterOperator controller, which reports the
 // operator as available without deploying Karpenter on the unsupported platform.
-func runClusterOperatorReporter(ctx context.Context, restCfg *rest.Config, opts Options, platform configv1.PlatformType) error {
-	mgr, err := newManager(restCfg, opts)
-	if err != nil {
-		return err
-	}
-
+func runClusterOperatorReporter(ctx context.Context, mgr ctrl.Manager, opts Options, platform configv1.PlatformType) error {
 	reporter := clusteroperator.NewController(mgr, &clusteroperator.ControllerConfig{
 		Namespace:           opts.Namespace,
 		ReleaseVersion:      opts.ReleaseVersion,
@@ -199,7 +196,7 @@ func runClusterOperatorReporter(ctx context.Context, restCfg *rest.Config, opts 
 		return err
 	}
 
-	return startManager(ctx, mgr)
+	return startManager(ctx, mgr, opts.Namespace)
 }
 
 func newManager(restCfg *rest.Config, opts Options) (ctrl.Manager, error) {
@@ -225,13 +222,15 @@ func newManager(restCfg *rest.Config, opts Options) (ctrl.Manager, error) {
 	return mgr, nil
 }
 
-func startManager(ctx context.Context, mgr ctrl.Manager) error {
+func startManager(ctx context.Context, mgr ctrl.Manager, namespace string) error {
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		return fmt.Errorf("setting up health check: %w", err)
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		return fmt.Errorf("setting up ready check: %w", err)
 	}
+
+	go controllers.SetupOperatorInfoMetricWithRetry(ctx, mgr.GetAPIReader(), namespace)
 
 	ctrl.Log.WithName("setup").Info("Starting manager")
 	if err := mgr.Start(ctx); err != nil {
