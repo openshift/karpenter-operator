@@ -100,6 +100,7 @@ func (c *OCPController) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Res
 		imagePullPolicy:   c.imagePullPolicy,
 		logLevelArg:       karp.Spec.LogLevel.Arg(),
 		priorityClassName: karpenterPodPriorityClassName,
+		additionalEnv:     interruptionQueueEnv(karp.Spec.AWS),
 	}
 	if err := applyDeployment(ctx, c.client, cfg, ref); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling Deployment: %w", err)
@@ -109,6 +110,13 @@ func (c *OCPController) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Res
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func interruptionQueueEnv(aws *autoscalingv1alpha1.KarpenterAWSConfig) []corev1.EnvVar {
+	if aws == nil || aws.InterruptionQueueName == "" {
+		return nil
+	}
+	return []corev1.EnvVar{{Name: "INTERRUPTION_QUEUE", Value: aws.InterruptionQueueName}}
 }
 
 func (c *OCPController) SetupWithManager(mgr ctrl.Manager) error {

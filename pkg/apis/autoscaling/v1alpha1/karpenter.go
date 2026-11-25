@@ -56,6 +56,23 @@ type KarpenterSpec struct {
 	// +kubebuilder:default=info
 	// +optional
 	LogLevel KarpenterLogLevel `json:"logLevel,omitempty"`
+
+	// AWS selects settings applied only when the operand runs on AWS.
+	// +optional
+	AWS *KarpenterAWSConfig `json:"aws,omitempty"`
+}
+
+// KarpenterAWSConfig configures AWS integrations for the standalone operand.
+// +kubebuilder:validation:MinProperties=1
+type KarpenterAWSConfig struct {
+	// InterruptionQueueName names the SQS queue that receives EC2 interruption events from EventBridge.
+	// When omitted, interruption handling is disabled. Use a queue dedicated to this cluster in its AWS account and region.
+	// Grant the operand sqs:GetQueueUrl, sqs:ReceiveMessage and sqs:DeleteMessage on the queue and kms:Decrypt on the key if using SSE-KMS.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=80
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_-]+(\.fifo)?$`
+	// +optional
+	InterruptionQueueName string `json:"interruptionQueueName,omitempty"`
 }
 
 // KarpenterStatus defines the observed state of the Karpenter operand.
