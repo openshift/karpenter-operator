@@ -18,14 +18,11 @@ func TestAKSNodeClassSpec(t *testing.T) {
 		spec openshiftkarpenterv1alpha1.OpenShiftAzureNodeClassSpec
 		want azurekarpenterv1beta1.AKSNodeClassSpec
 	}{
-		"When the spec is empty, it should set the platform defaults for the image family, OS disk size and encryption at host": {
+		"When the spec is empty, it should set the platform defaults for the image family and OS disk size": {
 			spec: openshiftkarpenterv1alpha1.OpenShiftAzureNodeClassSpec{},
 			want: azurekarpenterv1beta1.AKSNodeClassSpec{
 				ImageFamily:  new("Ubuntu"),
 				OSDiskSizeGB: new(int32(120)),
-				Security: &azurekarpenterv1beta1.Security{
-					EncryptionAtHost: new(false),
-				},
 			},
 		},
 		"When all fields are set, it should map each of them to the AKSNodeClass": {
@@ -52,7 +49,7 @@ func TestAKSNodeClassSpec(t *testing.T) {
 				},
 			},
 		},
-		"When encryption at host is disabled, it should disable it on the AKSNodeClass": {
+		"When encryption at host is disabled, it should leave the AKSNodeClass security unset": {
 			spec: openshiftkarpenterv1alpha1.OpenShiftAzureNodeClassSpec{
 				Security: openshiftkarpenterv1alpha1.AzureSecurity{
 					Encryption: openshiftkarpenterv1alpha1.AzureEncryption{
@@ -63,9 +60,6 @@ func TestAKSNodeClassSpec(t *testing.T) {
 			want: azurekarpenterv1beta1.AKSNodeClassSpec{
 				ImageFamily:  new("Ubuntu"),
 				OSDiskSizeGB: new(int32(120)),
-				Security: &azurekarpenterv1beta1.Security{
-					EncryptionAtHost: new(false),
-				},
 			},
 		},
 		"When the kubelet is configured without maxPods, it should leave maxPods unset": {
@@ -75,9 +69,6 @@ func TestAKSNodeClassSpec(t *testing.T) {
 			want: azurekarpenterv1beta1.AKSNodeClassSpec{
 				ImageFamily:  new("Ubuntu"),
 				OSDiskSizeGB: new(int32(120)),
-				Security: &azurekarpenterv1beta1.Security{
-					EncryptionAtHost: new(false),
-				},
 			},
 		},
 	}
