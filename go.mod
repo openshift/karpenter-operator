@@ -129,3 +129,5 @@ replace github.com/Azure/karpenter-provider-azure => github.com/openshift/Azure-
 replace sigs.k8s.io/karpenter => github.com/openshift/kubernetes-sigs-karpenter v0.0.0-20261110172752-280f26969b1f
 
 replace github.com/openshift/karpenter-operator/api => ./api
+
+replace github.com/openshift/hypershift/api => ../hypershift/api
