@@ -1,0 +1,70 @@
+apiVersion: apiextensions.k8s.io/v1
+name: interruption queue
+crdName: karpenters.autoscaling.openshift.io
+version: v1alpha1
+tests:
+  onCreate:
+  - name: When AWS configuration is omitted, it should pass
+    initial: |
+      apiVersion: autoscaling.openshift.io/v1alpha1
+      kind: Karpenter
+      spec: {}
+  - name: When AWS configuration is empty, it should fail
+    initial: |
+      apiVersion: autoscaling.openshift.io/v1alpha1
+      kind: Karpenter
+      spec:
+        aws: {}
+    expectedError: "should have at least 1 properties"
+  - name: When the queue name has 80 characters, it should preserve it
+    initial: |
+      apiVersion: autoscaling.openshift.io/v1alpha1
+      kind: Karpenter
+      spec:
+        aws:
+          interruptionQueueName: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    expected: |
+      apiVersion: autoscaling.openshift.io/v1alpha1
+      kind: Karpenter
+      spec:
+        logLevel: info
+        aws:
+          interruptionQueueName: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  - name: When the queue has a FIFO suffix, it should preserve it
+    initial: |
+      apiVersion: autoscaling.openshift.io/v1alpha1
+      kind: Karpenter
+      spec:
+        aws:
+          interruptionQueueName: OCP-4_events.fifo
+    expected: |
+      apiVersion: autoscaling.openshift.io/v1alpha1
+      kind: Karpenter
+      spec:
+        logLevel: info
+        aws:
+          interruptionQueueName: OCP-4_events.fifo
+  - name: When the queue name is empty, it should fail
+    initial: |
+      apiVersion: autoscaling.openshift.io/v1alpha1
+      kind: Karpenter
+      spec:
+        aws:
+          interruptionQueueName: ""
+    expectedError: "spec.aws.interruptionQueueName"
+  - name: When the queue name exceeds 80 characters, it should fail
+    initial: |
+      apiVersion: autoscaling.openshift.io/v1alpha1
+      kind: Karpenter
+      spec:
+        aws:
+          interruptionQueueName: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    expectedError: "spec.aws.interruptionQueueName"
+  - name: When the queue name contains an unexpected period, it should fail
+    initial: |
+      apiVersion: autoscaling.openshift.io/v1alpha1
+      kind: Karpenter
+      spec:
+        aws:
+          interruptionQueueName: cluster.events
+    expectedError: "spec.aws.interruptionQueueName"

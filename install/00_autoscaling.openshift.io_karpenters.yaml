@@ -47,6 +47,21 @@ spec:
             description: KarpenterSpec defines the desired state of the Karpenter
               operand.
             properties:
+              aws:
+                description: AWS selects settings applied only when the operand runs
+                  on AWS.
+                minProperties: 1
+                properties:
+                  interruptionQueueName:
+                    description: |-
+                      InterruptionQueueName names the SQS queue that receives EC2 interruption events from EventBridge.
+                      When omitted, interruption handling is disabled. Use a queue dedicated to this cluster in its AWS account and region.
+                      Grant the operand sqs:GetQueueUrl, sqs:ReceiveMessage and sqs:DeleteMessage on the queue and kms:Decrypt on the key if using SSE-KMS.
+                    maxLength: 80
+                    minLength: 1
+                    pattern: ^[a-zA-Z0-9_-]+(\.fifo)?$
+                    type: string
+                type: object
               logLevel:
                 default: info
                 description: LogLevel is the log verbosity level. Can be one of 'debug',

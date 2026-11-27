@@ -7,6 +7,7 @@ import (
 
 	openshiftkarpenterv1 "github.com/openshift/karpenter-operator/api/karpenter/v1"
 	autoscalingv1alpha1 "github.com/openshift/karpenter-operator/pkg/apis/autoscaling/v1alpha1"
+	cloudaws "github.com/openshift/karpenter-operator/pkg/cloudprovider/aws"
 	"github.com/openshift/karpenter-operator/pkg/cloudprovider/common"
 	testfake "github.com/openshift/karpenter-operator/test/pkg/fake"
 
@@ -294,6 +295,43 @@ func TestOCPReconcile(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOCPInterruptionQueue(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+	s := runtime.NewScheme()
+	for _, register := range []func(*runtime.Scheme) error{autoscalingv1alpha1.AddToScheme, appsv1.AddToScheme, corev1.AddToScheme, rbacv1.AddToScheme, monitoringv1.AddToScheme} {
+		g.Expect(register(s)).To(Succeed())
+	}
+	karp := karpenterCR("")
+	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(karp).Build()
+	cfg := *ocpTestConfig
+	cfg.CloudProvider = &cloudaws.Provider{}
+	controller := NewOCPController(c, &cfg)
+	reconcileEnv := func() []corev1.EnvVar {
+		t.Helper()
+		_, err := controller.Reconcile(ctx, ctrl.Request{})
+		g.Expect(err).NotTo(HaveOccurred())
+		dep := &appsv1.Deployment{}
+		g.Expect(c.Get(ctx, client.ObjectKey{Namespace: cfg.Namespace, Name: karpenterName}, dep)).To(Succeed())
+		return dep.Spec.Template.Spec.Containers[0].Env
+	}
+	queueEnv := HaveField("Name", "INTERRUPTION_QUEUE")
+	g.Expect(reconcileEnv()).NotTo(ContainElement(queueEnv))
+
+	g.Expect(c.Get(ctx, client.ObjectKeyFromObject(karp), karp)).To(Succeed())
+	karp.Spec.AWS = &autoscalingv1alpha1.KarpenterAWSConfig{InterruptionQueueName: "cluster-events"}
+	g.Expect(c.Update(ctx, karp)).To(Succeed())
+	g.Expect(reconcileEnv()).To(ContainElement(corev1.EnvVar{Name: "INTERRUPTION_QUEUE", Value: "cluster-events"}))
+
+	karp.Spec.AWS.InterruptionQueueName = "replacement-events"
+	g.Expect(c.Update(ctx, karp)).To(Succeed())
+	g.Expect(reconcileEnv()).To(ContainElement(corev1.EnvVar{Name: "INTERRUPTION_QUEUE", Value: "replacement-events"}))
+
+	karp.Spec.AWS = nil
+	g.Expect(c.Update(ctx, karp)).To(Succeed())
+	g.Expect(reconcileEnv()).NotTo(ContainElement(queueEnv))
 }
 
 func expectOptionalImage(g Gomega, actual string, expected *string) {

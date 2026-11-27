@@ -39,11 +39,13 @@ func TestSchema(t *testing.T) {
 	// Resolve the CRD directory relative to this file so that the tests do not depend on the working directory.
 	_, thisFile, _, ok := runtime.Caller(0)
 	g.Expect(ok).To(BeTrue(), "could not determine the path of the test file")
-	crdDir := filepath.Join(filepath.Dir(thisFile), "..", "..", "pkg", "assets", "hypershift")
-
-	var err error
-	suites, err = runner.LoadTestSuiteSpecs(filepath.Join(crdDir, "tests"), crdDir)
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
+	nodeClassDir := filepath.Join(repoRoot, "pkg", "assets", "hypershift")
+	nodeClassSuites, err := runner.LoadTestSuiteSpecs(filepath.Join(nodeClassDir, "tests"), nodeClassDir)
 	g.Expect(err).ToNot(HaveOccurred())
+	standaloneSuites, err := runner.LoadTestSuiteSpecs(filepath.Join(filepath.Dir(thisFile), "standalone"), filepath.Join(repoRoot, "install"))
+	g.Expect(err).ToNot(HaveOccurred())
+	suites = append(nodeClassSuites, standaloneSuites...)
 
 	RunSpecs(t, schemaSuiteName())
 }
