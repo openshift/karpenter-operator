@@ -34,6 +34,7 @@ spec:
         args:
         - --leader-elect
         - --namespace=$(NAMESPACE)
+        - --metrics-cert-dir=/etc/karpenter-operator/tls
         env:
         - name: RELEASE_VERSION
           value: "0.0.1-snapshot"
@@ -78,11 +79,22 @@ spec:
             port: 8081
           initialDelaySeconds: 5
         volumeMounts:
+        - name: cert
+          mountPath: /etc/karpenter-operator/tls
+          readOnly: true
         - name: provider-creds
           mountPath: /etc/provider
           readOnly: true
         terminationMessagePolicy: FallbackToLogsOnError
       volumes:
+      - name: cert
+        secret:
+          secretName: karpenter-operator-cert
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
       - name: provider-creds
         secret:
           secretName: karpenter-operator-cloud-credentials
