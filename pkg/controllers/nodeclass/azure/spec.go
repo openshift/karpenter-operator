@@ -28,6 +28,14 @@ const (
 // aksNodeClassSpec returns the AKSNodeClass spec for an OpenShiftAzureNodeClass.
 // The Marketplace image and user data are left unset; they come from the ignition pipeline.
 func aksNodeClassSpec(spec openshiftkarpenterv1alpha1.OpenShiftAzureNodeClassSpec) azurekarpenterv1beta1.AKSNodeClassSpec {
+	// Azure rejects securityProfile.encryptionAtHost on subscriptions without the EncryptionAtHost feature
+	// registered, even when it is false, so the field is set only when host encryption is enabled and left
+	// nil otherwise, matching the documented default of "Disabled".
+	var security *azurekarpenterv1beta1.Security
+	if spec.Security.Encryption.HostEncryption == openshiftkarpenterv1alpha1.AzureHostEncryptionEnabled {
+		security = &azurekarpenterv1beta1.Security{EncryptionAtHost: new(true)}
+	}
+
 	return azurekarpenterv1beta1.AKSNodeClassSpec{
 		VNETSubnetID: lo.EmptyableToPtr(spec.VNETSubnetID),
 		// The image family doesn't select the image in OpenShift mode. It's set to the CRD default because it's part
@@ -37,9 +45,7 @@ func aksNodeClassSpec(spec openshiftkarpenterv1alpha1.OpenShiftAzureNodeClassSpe
 		OSDiskSizeGB: new(cmp.Or(spec.OSDiskSizeGiB, defaultOSDiskSizeGiB)),
 		Tags:         spec.Tags,
 		MaxPods:      lo.EmptyableToPtr(spec.Kubelet.MaxPods),
-		Security: &azurekarpenterv1beta1.Security{
-			EncryptionAtHost: new(spec.Security.Encryption.HostEncryption == openshiftkarpenterv1alpha1.AzureHostEncryptionEnabled),
-		},
+		Security:     security,
 	}
 }
 
