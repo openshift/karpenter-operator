@@ -22,6 +22,7 @@ export KUBECONFIG=${SHARED_DIR}/nested_kubeconfig
 
 KARPENTER_CORE_DIR=$dir \
 KARPENTER_E2E_PERFORMANCE_REPLICAS=20 \
+KARPENTER_E2E_DRIFT_TIMEOUT=20m \
 FOCUS="Performance" \
 SKIP="StaticCapacity" \
 TEST_SUITE=regression \
